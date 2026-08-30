@@ -1,0 +1,272 @@
+/* 名句页 — 解析直接可见的卡片布局（无翻转） */
+
+.page { min-height: 100vh; padding-bottom: 20rpx; }
+
+/* ===== Hero 轮播 ===== */
+.hero-wrap {
+  position: relative;
+  z-index: 2;
+  margin: 24rpx 24rpx 8rpx;
+}
+
+.hero-swiper { height: 480rpx; }
+
+.hero-card {
+  position: relative;
+  height: 440rpx;
+  margin: 0 8rpx;
+  border-radius: var(--radius-xl);
+  border: 3rpx solid var(--c-border);
+  box-shadow: var(--shadow-sticker);
+  padding: 34rpx 36rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14rpx;
+  overflow: hidden;
+}
+
+.hero-badge {
+  position: absolute;
+  top: 20rpx;
+  left: 24rpx;
+  font-size: 20rpx;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--c-ink);
+  border: 2rpx solid var(--c-border);
+  border-radius: 999rpx;
+  padding: 4rpx 18rpx;
+}
+
+.hero-drama {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: rgba(11, 11, 15, 0.65);
+  letter-spacing: 1rpx;
+}
+
+.hero-ko {
+  font-size: 42rpx;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 2rpx 2rpx 0 rgba(11, 11, 15, 0.35);
+  line-height: 1.4;
+}
+
+.hero-roman {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: 0.5rpx;
+}
+
+.hero-zh { font-size: 26rpx; color: rgba(255, 255, 255, 0.92); }
+
+.hero-speaker {
+  align-self: flex-start;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--c-ink);
+  border: 2rpx solid var(--c-border);
+  border-radius: 999rpx;
+  padding: 8rpx 22rpx;
+}
+
+/* ===== 筛选区 ===== */
+.filters {
+  position: relative;
+  z-index: 2;
+  margin-top: 10rpx;
+}
+
+.filter-row {
+  white-space: nowrap;
+  padding: 8rpx 24rpx;
+}
+
+.filter-row-last { display: flex; }
+
+.ftag {
+  display: inline-block;
+  padding: 10rpx 24rpx;
+  margin-right: 12rpx;
+  border-radius: 999rpx;
+  background: var(--c-card);
+  border: 2rpx solid var(--c-border);
+  color: var(--c-ink-soft);
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.ftag-on { background: var(--c-klein); color: #fff; }
+.ftag-fav { background: var(--c-honey); color: var(--c-ink); }
+.ftag-ai { background: var(--c-mint); color: #033F39; }
+.ftag-ai.loading { opacity: 0.6; }
+
+/* ===== 名句卡（解析直接可见） ===== */
+.cards { position: relative; z-index: 2; padding: 10rpx 24rpx; }
+
+.qcard-outer { margin: 20rpx 0; }
+
+.qcard {
+  position: relative;
+  padding: 26rpx 30rpx;
+  box-sizing: border-box;
+  border: 3rpx solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sticker);
+  overflow: hidden;
+}
+
+.q-top { display: flex; gap: 12rpx; margin-bottom: 16rpx; }
+
+.q-drama { font-size: 20rpx; padding: 4rpx 16rpx; }
+.q-level { font-size: 20rpx; padding: 4rpx 16rpx; }
+
+.q-ko {
+  font-size: 38rpx;
+  font-weight: 900;
+  color: var(--c-ink);
+  line-height: 1.5;
+  margin-bottom: 14rpx;
+}
+
+/* 罗马音行：可点击直接朗读 */
+.q-roman {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 25rpx;
+  font-weight: 700;
+  color: var(--c-klein-deep);
+  background: var(--c-sky-soft);
+  border: 2rpx solid var(--c-border);
+  border-radius: 10rpx;
+  padding: 10rpx 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.q-roman-icon { font-size: 24rpx; }
+
+.q-zh {
+  font-size: 28rpx;
+  color: var(--c-ink-soft);
+  margin-bottom: 14rpx;
+  line-height: 1.5;
+}
+
+.q-grammar {
+  display: flex;
+  gap: 8rpx;
+  font-size: 23rpx;
+  color: var(--c-ink-soft);
+  background: var(--c-cream);
+  border: 2rpx dashed var(--c-border);
+  border-radius: 10rpx;
+  padding: 12rpx 16rpx;
+  line-height: 1.5;
+  margin-bottom: 14rpx;
+}
+
+.q-vocab { margin-bottom: 10rpx; }
+
+.v-chip {
+  display: inline-block;
+  font-size: 22rpx;
+  color: var(--c-ink);
+  background: var(--c-card);
+  border: 1.5rpx solid var(--c-border);
+  border-radius: 999rpx;
+  padding: 4rpx 16rpx;
+  margin: 4rpx 10rpx 4rpx 0;
+}
+
+.q-similar { font-size: 22rpx; color: var(--c-ink-soft); line-height: 1.7; margin-bottom: 8rpx; }
+.s-label { font-weight: 700; margin-right: 8rpx; }
+.s-item { margin-right: 14rpx; }
+
+/* ===== 操作条 ===== */
+.q-ops {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 18rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx dashed rgba(14, 24, 54, 0.25);
+  flex-wrap: wrap;
+}
+
+.opb {
+  flex: 1;
+  min-width: 96rpx;
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: var(--c-ink);
+  background: var(--c-card);
+  border: 2rpx solid var(--c-border);
+  border-radius: 12rpx;
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  padding: 12rpx 0;
+}
+
+.opb:active { transform: translate(2rpx, 2rpx); box-shadow: none; }
+
+.opb-fav {
+  background: var(--c-honey);
+  color: var(--c-ink);
+}
+
+/* ===== 列表状态 ===== */
+.list-end {
+  text-align: center;
+  font-size: 22rpx;
+  color: var(--c-mute);
+  padding: 24rpx 0;
+}
+
+.empty {
+  text-align: center;
+  color: var(--c-ink-soft);
+  font-size: 26rpx;
+  padding: 60rpx 40rpx;
+  line-height: 1.8;
+}
+
+/* ===== 转化 CTA ===== */
+.cta {
+  position: relative;
+  z-index: 2;
+  margin: 30rpx 24rpx 0;
+  padding: 26rpx 30rpx;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-lg);
+}
+
+.cta-text { flex: 1; }
+
+.cta-title {
+  font-size: 30rpx;
+  font-weight: 900;
+  color: var(--c-ink);
+}
+
+.cta-sub {
+  font-size: 22rpx;
+  color: var(--c-ink-soft);
+  margin-top: 6rpx;
+}
+
+.cta-go {
+  font-size: 26rpx;
+  font-weight: 900;
+  background: var(--c-klein);
+  color: #fff;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 3rpx 3rpx 0 0 var(--c-border);
+  border-radius: 999rpx;
+  padding: 14rpx 30rpx;
+}

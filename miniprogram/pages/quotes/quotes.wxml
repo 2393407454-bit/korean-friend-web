@@ -1,0 +1,110 @@
+<view class="page">
+  <!-- 贴纸装饰层 -->
+  <view class="sticker-layer">
+    <view class="sk sk-float-a" style="top:20rpx;right:-10rpx;">
+      <view class="sk-emoji">🎬</view>
+    </view>
+    <view class="sk sk-float-c" style="bottom:300rpx;left:12rpx;">
+      <view class="sk-emoji">💌</view>
+    </view>
+  </view>
+
+  <!-- ===== Hero：每日金句轮播 ===== -->
+  <view class="hero-wrap pop pop-1">
+    <swiper class="hero-swiper" circular autoplay interval="5000" indicator-dots indicator-color="rgba(255,255,255,.4)" indicator-active-color="#FFFFFF">
+      <swiper-item wx:for="{{heroQuotes}}" wx:key="id">
+        <view class="hero-card" style="background:linear-gradient(135deg,{{item.color[0]}},{{item.color[1]}})">
+          <view class="hero-badge" wx:if="{{index === 0}}">🌟 오늘의 명대사 · 今日名句</view>
+          <view class="hero-drama">📺 {{item.drama}}<text wx:if="{{item.year}}"> · {{item.year}}</text></view>
+          <view class="hero-ko">{{item.ko}}</view>
+          <view class="hero-roman">{{item.roman}}</view>
+          <view class="hero-zh">{{item.zh}}</view>
+          <view class="hero-speaker" catchtap="onSpeakTap" data-id="{{item.id}}">🔊 听发音</view>
+        </view>
+      </swiper-item>
+    </swiper>
+  </view>
+
+  <!-- ===== 筛选区 ===== -->
+  <view class="filters pop pop-2">
+    <scroll-view class="filter-row" scroll-x enable-flex show-scrollbar="{{false}}">
+      <view class="ftag {{filter.theme === item ? 'ftag-on' : ''}}"
+            wx:for="{{themes}}" wx:key="*this"
+            data-kind="theme" data-value="{{item}}" bindtap="onFilterTap">{{item === '全部' ? '🎭 主题' : item}}</view>
+    </scroll-view>
+    <scroll-view class="filter-row" scroll-x enable-flex show-scrollbar="{{false}}">
+      <view class="ftag {{filter.drama === item ? 'ftag-on' : ''}}"
+            wx:for="{{dramas}}" wx:key="*this"
+            data-kind="drama" data-value="{{item}}" bindtap="onFilterTap">{{item === '全部' ? '📺 全部剧集' : item}}</view>
+    </scroll-view>
+    <view class="filter-row filter-row-last">
+      <view class="ftag {{filter.level === item ? 'ftag-on' : ''}}"
+            wx:for="{{levels}}" wx:key="*this"
+            data-kind="level" data-value="{{item}}" bindtap="onFilterTap">{{item === '全部' ? '📊 全部难度' : item}}</view>
+      <view class="ftag ftag-fav {{favOnly ? 'ftag-on' : ''}}" bindtap="onFavFilterTap">⭐ 我的收藏</view>
+      <view class="ftag ftag-ai {{aiLoading ? 'loading' : ''}}" bindtap="onAiGenerate">{{aiLoading ? '✨ 生成中…' : '✨ AI 换一批'}}</view>
+    </view>
+  </view>
+
+  <!-- ===== 名句卡片流（解析直接可见） ===== -->
+  <view class="cards">
+    <view class="qcard-outer" wx:for="{{quotes}}" wx:key="id">
+      <view class="qcard" style="background:linear-gradient(160deg,{{item.color[0]}}14,{{item.color[1]}}0D)">
+        <view class="q-top">
+          <view class="q-drama tag tag-klein">📺 {{item.drama}}</view>
+          <view class="q-level tag tag-paper">{{item.level}} · {{item.theme}}</view>
+        </view>
+
+        <view class="q-ko" user-select>{{item.ko}}</view>
+
+        <!-- 罗马音 -->
+        <view class="q-roman" bindtap="onSpeakTap" data-id="{{item.id}}">
+          <text class="q-roman-icon">🔊</text>
+          <text user-select>{{item.roman}}</text>
+        </view>
+
+        <!-- 中文 -->
+        <view class="q-zh" user-select>{{item.zh}}</view>
+
+        <!-- 语法解析 -->
+        <view class="q-grammar" wx:if="{{item.grammar}}">
+          <text class="q-g-icon">💡</text>
+          <text user-select>{{item.grammar}}</text>
+        </view>
+
+        <!-- 重点词汇 -->
+        <view class="q-vocab" wx:if="{{item.vocab.length}}">
+          <text class="v-chip" wx:for="{{item.vocab}}" wx:for-item="v" wx:key="ko">{{v.ko}} · {{v.zh}}</text>
+        </view>
+
+        <!-- 相似表达 -->
+        <view class="q-similar" wx:if="{{item.similar.length}}">
+          <text class="s-label">相似表达：</text>
+          <text class="s-item" wx:for="{{item.similar}}" wx:for-item="sm" wx:key="*this">{{sm}}</text>
+        </view>
+
+        <!-- 操作条 -->
+        <view class="q-ops">
+          <view class="opb {{item.isFav ? 'opb-fav' : ''}}" catchtap="onFavTap" data-id="{{item.id}}">{{item.isFav ? '⭐ 已藏' : '☆ 收藏'}}</view>
+          <view class="opb" catchtap="onFollowTap" data-id="{{item.id}}">🎤 跟读</view>
+          <view class="opb" catchtap="onAskTap" data-id="{{item.id}}">💬 问 AI</view>
+          <view class="opb" catchtap="onShareImgTap" data-id="{{item.id}}">🖼 分享</view>
+        </view>
+      </view>
+    </view>
+
+    <view class="list-end" wx:if="{{quotes.length}}">{{hasMore ? '上滑加载更多 ↓' : '— 到底啦，点上方 AI 换一批 —'}}</view>
+    <view class="empty" wx:if="{{!quotes.length}}">该筛选下暂无名句，换个筛选或点 AI 生成 ✨</view>
+  </view>
+
+  <!-- ===== 转化 CTA ===== -->
+  <view class="cta stick" bindtap="onGoChat">
+    <view class="cta-text">
+      <view class="cta-title">想系统学韩语？</view>
+      <view class="cta-sub">去对话页，让 AI 老师带你练这句话 →</view>
+    </view>
+    <view class="cta-go">GO</view>
+  </view>
+
+  <view style="height: calc(env(safe-area-inset-bottom) + 40rpx);"></view>
+</view>

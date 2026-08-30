@@ -1,0 +1,665 @@
+.page {
+  padding: 20rpx 0 calc(env(safe-area-inset-bottom) + 30rpx);
+  position: relative;
+}
+
+/* ===== Hero 卡 ===== */
+.hero {
+  margin: 28rpx 28rpx 22rpx;
+  padding: 28rpx 26rpx 30rpx;
+  background:
+    radial-gradient(circle at 115% -10%, rgba(255, 210, 94, 0.4) 0%, transparent 55%),
+    radial-gradient(circle at -10% 110%, rgba(110, 211, 196, 0.28) 0%, transparent 55%),
+    #fff;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-inner {
+  display: flex;
+  align-items: stretch;
+  gap: 18rpx;
+}
+
+.hero-text { flex: 1; min-width: 0; }
+
+.hero-top {
+  font-size: 32rpx;
+  font-weight: 900;
+  color: var(--c-ink);
+  letter-spacing: 1rpx;
+}
+
+.hero-mid {
+  font-size: 40rpx;
+  font-weight: 900;
+  margin: 8rpx 0 14rpx;
+  color: var(--c-klein-deep);
+  letter-spacing: 1rpx;
+  /* Lazy-back 风格：粗笔画字体模拟 */
+  text-shadow:
+    -1rpx 0 0 rgba(12, 93, 255, 0.15),
+    1rpx 0 0 rgba(12, 93, 255, 0.15);
+}
+
+.hero-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+.hero-sub view {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--c-ink-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+}
+.hero-sub text { font-size: 26rpx; }
+
+/* 取景器 */
+.vf {
+  width: 170rpx;
+  height: 170rpx;
+  background: linear-gradient(135deg, var(--c-sky-mist), var(--c-sky-soft));
+  border-radius: 24rpx;
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.vf-corner {
+  position: absolute;
+  width: 28rpx; height: 28rpx;
+  border: 3.5rpx solid var(--c-ink);
+}
+.vf-corner.tl { top: 14rpx; left: 14rpx;  border-right: none; border-bottom: none; }
+.vf-corner.tr { top: 14rpx; right: 14rpx; border-left: none;  border-bottom: none; }
+.vf-corner.bl { bottom: 14rpx; left: 14rpx;  border-right: none; border-top: none; }
+.vf-corner.br { bottom: 14rpx; right: 14rpx; border-left: none;  border-top: none; }
+
+.vf-target {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60rpx;
+  animation: target-bob 2.2s ease-in-out infinite;
+}
+@keyframes target-bob {
+  0%,100%{ transform: translateY(0) rotate(0deg); }
+  50%    { transform: translateY(-6rpx) rotate(-4deg); }
+}
+
+.vf-scan {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 4rpx;
+  background: linear-gradient(90deg, transparent, var(--c-coral), transparent);
+  top: 0;
+  box-shadow: 0 0 16rpx var(--c-coral);
+  animation: scan 2s ease-in-out infinite;
+}
+@keyframes scan {
+  0%   { top: 15%; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { top: 85%; opacity: 0; }
+}
+
+.vf-tag {
+  position: absolute;
+  bottom: 10rpx;
+  right: 10rpx;
+  font-size: 16rpx;
+  font-weight: 900;
+  letter-spacing: 1rpx;
+  padding: 3rpx 10rpx;
+  background: var(--c-ink);
+  color: #fff;
+  border-radius: 6rpx;
+  transform: rotate(-4deg);
+}
+
+/* ===== 练习区 ===== */
+.practice {
+  margin: 14rpx 28rpx 20rpx;
+  padding: 24rpx 22rpx 22rpx;
+  background: #fff;
+}
+
+.practice-head, .lessons-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 900;
+  color: var(--c-ink);
+  position: relative;
+}
+
+.level-tag {
+  padding: 4rpx 18rpx !important;
+  font-size: 22rpx !important;
+}
+.sub-tag {
+  padding: 4rpx 16rpx !important;
+  font-size: 22rpx !important;
+  font-weight: 700 !important;
+}
+
+.pron-envelope {
+  position: relative;
+}
+
+.pron-main {
+  background: var(--c-sky-soft);
+  padding: 20rpx 20rpx;
+  transition: all 0.25s ease;
+}
+.pron-main.open {
+  background: linear-gradient(135deg, var(--c-sky-soft), #FFFFFF 60%);
+}
+
+.pm-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.pm-ico {
+  width: 72rpx; height: 72rpx;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34rpx;
+  padding: 0 !important;
+  border-radius: 20rpx;
+}
+
+.pm-ko {
+  font-size: 38rpx;
+  font-weight: 900;
+  color: var(--c-klein-deep);
+  letter-spacing: 1rpx;
+}
+.pm-zh {
+  font-size: 24rpx;
+  color: var(--c-ink-soft);
+  margin-top: 4rpx;
+  font-weight: 700;
+}
+
+.pm-chevron {
+  width: 60rpx; height: 60rpx;
+  border-radius: 18rpx;
+  background: #fff;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 30rpx;
+  font-weight: 900;
+  color: var(--c-klein);
+}
+
+/* 详情 */
+.pron-detail {
+  margin-top: -10rpx;
+  padding: 28rpx 22rpx 22rpx;
+  background: #fff;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.pd-tag {
+  align-self: flex-start;
+  font-size: 20rpx;
+  font-weight: 800;
+  letter-spacing: 1rpx;
+  padding: 4rpx 16rpx;
+  background: var(--c-honey);
+  color: var(--c-ink);
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  border-radius: 999rpx;
+}
+
+.pd-romaji {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: var(--c-klein);
+  letter-spacing: 1rpx;
+  padding: 10rpx 16rpx;
+  background: var(--c-cream);
+  border-radius: 14rpx;
+  border: 2rpx dashed rgba(14,24,54,0.18);
+}
+
+.pd-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 10rpx;
+  padding: 14rpx 16rpx;
+  background: #F7FFD1;
+  border-radius: 18rpx;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 3rpx 3rpx 0 0 var(--c-border);
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--c-ink);
+  font-weight: 600;
+}
+.tip-icon { font-size: 30rpx; flex-shrink: 0; }
+
+.pd-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-top: 4rpx;
+  flex-wrap: wrap;
+}
+
+.btn-sm {
+  padding: 12rpx 22rpx !important;
+  font-size: 26rpx !important;
+  font-weight: 800 !important;
+  border-radius: 18rpx !important;
+}
+
+.rec-on {
+  background: linear-gradient(135deg, var(--c-coral), #FF8A5C) !important;
+  color: #fff !important;
+}
+
+/* 评估卡 */
+.eval-card {
+  margin-top: 20rpx;
+  padding: 22rpx 22rpx 20rpx;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(110,211,196,0.28) 0%, transparent 60%),
+    #fff;
+}
+
+.eval-head {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  margin-bottom: 14rpx;
+}
+
+.eval-score { display: flex; align-items: baseline; }
+.s-num {
+  font-size: 64rpx;
+  font-weight: 900;
+  color: var(--c-klein-deep);
+  line-height: 1;
+}
+.s-100 {
+  font-size: 22rpx;
+  font-weight: 800;
+  color: var(--c-mute);
+  margin-left: 6rpx;
+}
+
+.eval-verdict {
+  padding: 6rpx 22rpx !important;
+  font-size: 24rpx !important;
+  margin-left: auto;
+}
+
+.eval-tip {
+  font-size: 26rpx;
+  font-weight: 700;
+  line-height: 1.7;
+  color: var(--c-ink);
+  padding: 12rpx 16rpx;
+  background: var(--c-cream);
+  border-radius: 14rpx;
+  border: 2rpx dashed rgba(14,24,54,0.18);
+  margin-bottom: 14rpx;
+}
+
+.eval-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+.fb-chip {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 18rpx;
+  border-radius: 999rpx;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  font-size: 24rpx;
+  font-weight: 800;
+}
+.fb-chip.ok  { background: #D7F5EC; color: #0E836E; }
+.fb-chip.bad { background: #FFE0EA; color: #C22A5A; }
+.fb-mark { font-size: 22rpx; margin-left: 2rpx; }
+
+/* 录音浮层 */
+.rec-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 24, 54, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: fadein 0.2s ease;
+}
+@keyframes fadein { from{opacity:0;} to{opacity:1;} }
+
+.rec-card {
+  position: relative;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(12,93,255,0.2) 0%, transparent 55%),
+    #fff;
+  padding: 40rpx 50rpx 32rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+  min-width: 540rpx;
+}
+.rec-badge {
+  position: absolute;
+  top: -22rpx;
+  left: -10rpx;
+  transform: rotate(-6deg);
+  padding: 6rpx 22rpx !important;
+}
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  height: 120rpx;
+  margin: 10rpx 0;
+}
+.wave .bar {
+  width: 12rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(180deg, var(--c-mint), var(--c-klein));
+  border: 2rpx solid var(--c-border);
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  animation: w 0.9s ease-in-out infinite;
+}
+.wave .b1{ height:28rpx; animation-delay:0s; }
+.wave .b2{ height:52rpx; animation-delay:.08s; }
+.wave .b3{ height:80rpx; animation-delay:.16s; }
+.wave .b4{ height:104rpx;animation-delay:.24s; }
+.wave .b5{ height:78rpx; animation-delay:.32s; }
+.wave .b6{ height:50rpx; animation-delay:.4s;  }
+.wave .b7{ height:28rpx; animation-delay:.48s; }
+@keyframes w {
+  0%,100%{ transform: scaleY(0.4); opacity: 0.7; }
+  50%    { transform: scaleY(1.1); opacity: 1;   }
+}
+
+.rec-hint {
+  font-size: 28rpx; font-weight: 800; color: var(--c-ink);
+  padding: 8rpx 18rpx;
+  background: var(--c-sky-soft);
+  border-radius: 14rpx;
+  border: 2rpx dashed rgba(14,24,54,0.2);
+  max-width: 490rpx;
+  text-align: center;
+}
+.rec-sub  {
+  font-size: 24rpx; font-weight: 700;
+  background: var(--c-coral);
+  color: #fff;
+  padding: 6rpx 22rpx;
+  border-radius: 999rpx;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 3rpx 3rpx 0 0 var(--c-border);
+}
+
+/* ===== 课程列表 ===== */
+.lessons {
+  margin: 10rpx 28rpx 0;
+}
+
+.cards-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.card-wrap {
+  perspective: 1000rpx;
+  position: relative;
+  padding: 6rpx 0;
+}
+
+.lesson-card {
+  background: #fff;
+  padding: 22rpx 22rpx 20rpx;
+  position: relative;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card-active {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255,210,94,0.35) 0%, transparent 55%),
+    #FFF !important;
+}
+
+.card-open {
+  transform: rotate(0deg) translateY(-2rpx) scale(1.01) !important;
+}
+
+/* corner level 贴纸 */
+.corner-lv {
+  position: absolute;
+  top: -16rpx;
+  right: -8rpx;
+  transform: rotate(6deg);
+  padding: 4rpx 18rpx !important;
+  font-size: 20rpx !important;
+  color: #fff !important;
+  z-index: 2;
+}
+
+/* 小图钉 */
+.pin {
+  position: absolute;
+  top: -10rpx;
+  left: 30rpx;
+  width: 20rpx; height: 20rpx;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 30%, #fff 0%, var(--c-coral) 30%, #C22A5A 100%);
+  border: 2rpx solid var(--c-border);
+  box-shadow: 1.5rpx 1.5rpx 0 0 var(--c-border);
+  z-index: 2;
+}
+
+.lc-head {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+}
+
+.lc-emoji {
+  width: 68rpx; height: 68rpx;
+  padding: 0 !important;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32rpx;
+  border-radius: 20rpx;
+  flex-shrink: 0;
+}
+
+.lc-title-group { flex: 1; min-width: 0; }
+.lc-ko {
+  font-size: 32rpx;
+  font-weight: 900;
+  color: var(--c-ink);
+  letter-spacing: 0.5rpx;
+}
+.lc-zh {
+  font-size: 22rpx;
+  color: var(--c-ink-soft);
+  font-weight: 700;
+  margin-top: 2rpx;
+}
+
+.lc-chv {
+  font-size: 28rpx;
+  font-weight: 900;
+  color: var(--c-klein);
+  width: 52rpx; height: 52rpx;
+  border-radius: 16rpx;
+  background: var(--c-sky-soft);
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* 课程卡展开内容 */
+.lc-detail {
+  margin-top: 18rpx;
+  padding-top: 18rpx;
+  border-top: 2rpx dashed rgba(14,24,54,0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 14rpx;
+}
+
+.lcd-romaji {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+.lcd-label {
+  font-size: 20rpx;
+  font-weight: 800;
+  padding: 4rpx 14rpx;
+  background: var(--c-honey);
+  color: var(--c-ink);
+  border-radius: 999rpx;
+  border: 2rpx solid var(--c-border);
+  letter-spacing: 1rpx;
+}
+.lcd-val {
+  font-size: 28rpx;
+  font-weight: 800;
+  color: var(--c-klein);
+  letter-spacing: 1rpx;
+}
+
+.lcd-tip {
+  padding: 12rpx 16rpx;
+  background: #F7FFD1;
+  border-radius: 16rpx;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--c-ink);
+  line-height: 1.65;
+  display: flex;
+  gap: 10rpx;
+}
+
+.lcd-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+/* AI 评分卡新增 */
+.eval-asr {
+  font-size: 24rpx;
+  color: var(--c-klein-deep);
+  background: var(--c-sky-soft);
+  border: 2rpx dashed var(--c-border);
+  border-radius: 12rpx;
+  padding: 10rpx 16rpx;
+  margin-top: 14rpx;
+}
+.evaluating { opacity: 0.7; }
+
+/* ===== AI 动态课程新增 ===== */
+.refresh-btn {
+  font-size: 24rpx;
+  color: var(--c-klein);
+  background: var(--c-sky-soft);
+  border: 2rpx solid var(--c-border);
+  border-radius: 999rpx;
+  padding: 8rpx 22rpx;
+  font-weight: 700;
+}
+
+.refresh-btn.spinning {
+  opacity: 0.6;
+}
+
+.skeleton-card {
+  padding: 30rpx 28rpx;
+}
+
+.sk-line {
+  background: linear-gradient(90deg, #E8F1F8 25%, #F4F9FD 50%, #E8F1F8 75%);
+  background-size: 400% 100%;
+  animation: sk-shine 1.4s ease infinite;
+  border-radius: 10rpx;
+}
+
+.sk-line-title { height: 34rpx; width: 60%; margin-bottom: 16rpx; }
+.sk-line-sub { height: 24rpx; width: 85%; }
+
+@keyframes sk-shine {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+.score-badge {
+  position: absolute;
+  right: 18rpx;
+  bottom: 14rpx;
+  font-size: 20rpx;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, var(--c-mint), #14B8A6);
+  border: 2rpx solid var(--c-border);
+  border-radius: 999rpx;
+  padding: 4rpx 16rpx;
+  box-shadow: 2rpx 2rpx 0 0 var(--c-border);
+}
+
+/* 难度角标配色 */
+.lv-easy { background: var(--c-mint); color: #033F39; }
+.lv-mid  { background: var(--c-klein); color: #fff; }
+.lv-hard { background: var(--c-coral); color: #fff; }
+
+/* ===== 录音结束按钮 ===== */
+.rec-stop {
+  margin-top: 6rpx;
+  background: var(--c-klein);
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 800;
+  padding: 18rpx 48rpx;
+  border-radius: 999rpx;
+  border: 2.5rpx solid var(--c-border);
+  box-shadow: 3rpx 3rpx 0 0 var(--c-border);
+}
+
+.rec-stop:active { transform: translate(2rpx, 2rpx); box-shadow: 1rpx 1rpx 0 0 var(--c-border); }
+
+.rec-tip {
+  font-size: 22rpx;
+  color: var(--c-mute);
+}

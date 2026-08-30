@@ -1,0 +1,230 @@
+/* =========================================================
+   设计语言：Apple 式简约（简约但大气）
+   浅中性底 + 白色大圆角卡 + 柔和弥散阴影 + 单一强调色 + 大留白
+   （类名保持不变，页面无需改动即继承新视觉）
+   ========================================================= */
+
+page {
+  /* —— 色彩令牌（中性 + 单一强调蓝）—— */
+  --c-sky-mist:   #EAF3FF;   /* 柔和蓝（浅底/装点） */
+  --c-sky-soft:   #F2F6FC;   /* 冰雾蓝（输入底/次级底） */
+  --c-klein:      #0071E3;   /* 主强调色（Apple 系蓝） */
+  --c-klein-deep: #0058C9;
+  --c-mint:       #34A88C;   /* 成功/辅助 */
+  --c-coral:      #FF3B30;   /* 警示/删除 */
+  --c-honey:      #FFF3C4;   /* 柔和黄（提示底） */
+  --c-cream:      #F7F7F9;   /* 浅灰底 */
+  --c-paper:      #FFFFFF;
+  --c-ink:        #1D1D1F;   /* 主文字 */
+  --c-ink-soft:   #55565C;   /* 次文字 */
+  --c-mute:       #86868B;   /* 弱化 */
+  --c-card:       #FFFFFF;
+  --c-border:     #E5E5EA;   /* 极浅灰发丝线（替代黑描边） */
+
+  /* —— 阴影 / 圆角：弥散柔和，无硬投影 —— */
+  --shadow-sticker: 0 6rpx 24rpx rgba(0, 0, 0, 0.05);
+  --shadow-soft:    0 12rpx 32rpx rgba(0, 0, 0, 0.06);
+  --radius-xl:  32rpx;
+  --radius-lg:  24rpx;
+  --radius-md:  20rpx;
+  --radius-sm:  14rpx;
+  --radius-pill: 999rpx;
+
+  background: #F5F5F7;
+  color: var(--c-ink);
+  font-size: 28rpx;
+  font-family: -apple-system, "PingFang SC", "SF Pro Text", "Noto Sans CJK KR", sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== 装饰层：整体隐藏（简约，去噪音） ===== */
+.sticker-layer { display: none; }
+.sk, .sk-emoji, .doodle-chair { display: none; }
+
+/* ===== 卡片：白底大圆角 + 柔和阴影 + 发丝线（无黑描边、无倾斜） ===== */
+.stick {
+  position: relative;
+  background: var(--c-card);
+  border: none;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sticker);
+  z-index: 1;
+  overflow: visible;
+}
+
+.stick-sm {
+  border-radius: var(--radius-md);
+  border: 1rpx solid var(--c-border);
+  box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.04);
+}
+
+/* 不再倾斜：保持端正（类名保留，页面无需改动） */
+.tilt-l, .tilt-r, .tilt-m { transform: none; }
+
+/* ===== Tag：柔和药丸（无边框、无投影） ===== */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 8rpx 22rpx;
+  border-radius: var(--radius-pill);
+  font-size: 23rpx;
+  font-weight: 600;
+  letter-spacing: 0.3rpx;
+  border: none;
+  box-shadow: none;
+  background: var(--c-cream);
+  color: var(--c-ink-soft);
+}
+
+.tag-klein  { background: var(--c-sky-mist); color: var(--c-klein-deep); }
+.tag-coral  { background: #FFE9E8; color: var(--c-coral); }
+.tag-honey  { background: #FFF6D9; color: #8A6D1A; }
+.tag-mint   { background: #E5F6F1; color: #1E7A67; }
+.tag-paper  { background: var(--c-paper); color: var(--c-ink); border: 1rpx solid var(--c-border); }
+.tag-cream  { background: var(--c-cream); color: var(--c-ink-soft); }
+
+/* ===== 标题 ===== */
+.doodle-title {
+  font-weight: 700;
+  letter-spacing: 0.5rpx;
+  line-height: 1.2;
+  color: var(--c-ink);
+  font-family: -apple-system, "PingFang SC", sans-serif;
+  position: relative;
+  display: inline-block;
+}
+
+.doodle-title .accent { color: var(--c-klein); position: relative; }
+
+/* 标题下划线：改为极淡的强调底色块 */
+.doodle-underline {
+  position: relative;
+  display: inline-block;
+}
+.doodle-underline::after {
+  content: "";
+  position: absolute;
+  left: -4rpx;
+  right: -4rpx;
+  bottom: 2rpx;
+  height: 12rpx;
+  background: rgba(0, 113, 227, 0.14);
+  border-radius: 999rpx;
+  transform: none;
+  opacity: 1;
+  z-index: -1;
+}
+
+/* ===== 主按钮：纯色填充 + 克制按压 ===== */
+.btn-stick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10rpx;
+  padding: 22rpx 32rpx;
+  background: var(--c-klein);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 28rpx;
+  font-weight: 600;
+  letter-spacing: 0.3rpx;
+  box-shadow: 0 4rpx 14rpx rgba(0, 113, 227, 0.22);
+  transition: all 0.15s ease;
+}
+
+.btn-stick.tap,
+.btn-stick.touch { transform: scale(0.97); opacity: 0.9; box-shadow: 0 2rpx 8rpx rgba(0, 113, 227, 0.18); }
+
+.btn-stick.btn-coral { background: var(--c-coral); box-shadow: 0 4rpx 14rpx rgba(255, 59, 48, 0.2); }
+.btn-stick.btn-honey { background: #FFEDB0; color: var(--c-ink); box-shadow: none; }
+.btn-stick.btn-mint  { background: var(--c-mint); color: #fff; }
+.btn-stick.btn-paper { background: var(--c-paper); color: var(--c-ink); border: 1rpx solid var(--c-border); }
+
+/* ===== 入场：轻微上浮淡入（无旋转/缩放过冲） ===== */
+.pop {
+  opacity: 0;
+  transform: translateY(14rpx);
+  animation: pop-stick 0.4s ease-out forwards;
+}
+.pop-1 { animation-delay: 0.04s; }
+.pop-2 { animation-delay: 0.08s; }
+.pop-3 { animation-delay: 0.12s; }
+.pop-4 { animation-delay: 0.16s; }
+.pop-5 { animation-delay: 0.2s; }
+.pop-6 { animation-delay: 0.24s; }
+.pop-7 { animation-delay: 0.28s; }
+.pop-8 { animation-delay: 0.32s; }
+
+@keyframes pop-stick {
+  from { opacity: 0; transform: translateY(14rpx); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== 按压反馈：轻微缩放 ===== */
+.press-stick {
+  transition: transform 0.12s ease, opacity 0.12s ease;
+}
+.press-stick.tap,
+.press-stick.touch { transform: scale(0.98); opacity: 0.85; }
+
+.press-bounce { transition: transform 0.12s ease; }
+.press-bounce.tap { transform: scale(0.96); }
+
+/* ===== 段落标题 ===== */
+.sec-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  margin: 36rpx 32rpx 20rpx;
+  padding-top: 0;
+}
+.sec-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  letter-spacing: 0.3rpx;
+  color: var(--c-ink);
+}
+.sec-emoji { font-size: 40rpx; filter: none; }
+
+/* ===== 状态点 / 进度条 ===== */
+.live-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #34C759;
+  border: none;
+  box-shadow: none;
+  animation: live-blink 1.6s ease-in-out infinite;
+}
+@keyframes live-blink { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+.progress-track {
+  width: 100%;
+  height: 16rpx;
+  background: var(--c-cream);
+  border: none;
+  border-radius: 999rpx;
+  overflow: hidden;
+  box-shadow: none;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--c-klein);
+  border-radius: 999rpx;
+  position: relative;
+  transition: width 1s cubic-bezier(0.25, 1, 0.35, 1);
+}
+.progress-fill::after { content: none; }
+
+/* ===== 通用卡片 ===== */
+.card {
+  background: var(--c-card);
+  border: none;
+  border-radius: var(--radius-xl);
+  padding: 30rpx 32rpx;
+  margin: 20rpx 24rpx;
+  box-shadow: var(--shadow-sticker);
+}

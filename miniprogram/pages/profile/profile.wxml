@@ -1,0 +1,270 @@
+<view class="page">
+  <!-- 贴纸背景：漂浮 袋子/咖啡杯/甜品/韩语字母/机器人 -->
+  <view class="sticker-layer">
+    <view class="sk sk-float-a" style="top:80rpx;left:-20rpx;">
+      <view class="sk-emoji">🛍️</view>
+    </view>
+    <view class="sk sk-float-b" style="top:340rpx;right:-10rpx;">
+      <view class="sk-emoji">☕</view>
+    </view>
+    <view class="sk sk-float-c" style="top:820rpx;left:40rpx;">
+      <view class="sk-emoji" style="font-size:44rpx;">🍰</view>
+    </view>
+    <view class="sk sk-float-d" style="top:1180rpx;right:20rpx;">
+      <view class="sk-emoji">🇰🇷</view>
+    </view>
+    <view class="sk sk-float-b" style="top:1540rpx;left:10rpx;">
+      <view class="sk-emoji" style="font-size:48rpx;">🤖</view>
+    </view>
+  </view>
+
+  <!-- ===== 账号卡：微信快捷资料 ===== -->
+  <view class="stick account-card tilt-m pop pop-0">
+    <button class="acc-avatar-btn" open-type="chooseAvatar" bind:chooseavatar="onChooseAvatar">
+      <image wx:if="{{avatarUrl}}" class="acc-avatar" src="{{avatarUrl}}" mode="aspectFill" />
+      <view wx:else class="acc-avatar acc-avatar-empty"><text>🧑</text></view>
+      <view class="acc-edit">改</view>
+    </button>
+    <view class="acc-info">
+      <input
+        class="acc-nick"
+        type="nickname"
+        value="{{nickname}}"
+        placeholder="点击填写微信昵称"
+        placeholder-class="acc-ph"
+        bindblur="onNicknameBlur"
+      />
+      <view class="acc-type tag tag-paper">{{accountType}}</view>
+    </view>
+  </view>
+
+  <!-- ====== 顶部大 Banner：我的档案卡（倾斜贴纸） ====== -->
+  <view class="stick profile-hero tilt-l pop pop-1">
+    <!-- 装饰贴纸（贴在四角外面） -->
+    <view class="corner-stick cs-1">Lv.</view>
+    <view class="corner-stick cs-2">D-1</view>
+
+    <!-- 左：等级徽章 -->
+    <view class="hero-left">
+      <view class="level-badge pulse-ring">
+        <view class="level-emoji">🐯</view>
+        <view class="level-text">{{profile.level || '초급'}}</view>
+      </view>
+    </view>
+
+    <!-- 右：主信息 -->
+    <view class="hero-right">
+      <view class="hero-hello">
+        <text class="doodle-underline">My</text>
+        <text class="doodle-title" style="margin-left:12rpx;">
+          <text class="accent">한국어</text> 档案
+        </text>
+      </view>
+
+      <view class="goal-row">
+        <block wx:if="{{profile.goalDisplay}}">
+          <text class="tag tag-coral">🎯 {{profile.goalDisplay}}</text>
+        </block>
+        <block wx:else>
+          <text class="tag tag-paper">🤍 完成一次对话自动定级</text>
+        </block>
+      </view>
+
+      <view class="meta-row" wx:if="{{profile.level}}">
+        <view class="meta-chip">
+          <text class="meta-k">🇰🇷 韩语配比</text>
+          <text class="meta-v">{{profile.korean_ratio !== undefined ? profile.korean_ratio * 100 : 30}}%</text>
+        </view>
+        <view class="meta-chip">
+          <text class="meta-k">🔤 罗马音</text>
+          <text class="meta-v">{{profile.romanization ? '开' : '关'}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ====== 学习进度（三张贴纸堆叠） ====== -->
+  <view class="sec-head pop pop-2">
+    <text class="sec-emoji">📊</text>
+    <text class="sec-title">学习进度</text>
+  </view>
+
+  <view class="stats-wrap">
+    <!-- 生词本 -->
+    <view class="stat-stick stick tilt-l pop pop-2 press-stick {{vTap==='vocab' ? 'tap' : ''}}"
+          data-k="vocab" bindtap="onStatTap"
+          catchtouchstart="onStatDown" catchtouchend="onStatUp">
+      <view class="stat-emoji bg-honey">📒</view>
+      <view class="stat-num" style="color: var(--c-klein);">{{vocabN}}</view>
+      <view class="stat-label">生词本</view>
+      <view class="stat-pin"></view>
+    </view>
+
+    <!-- 已掌握语法 -->
+    <view class="stat-stick stick tilt-r pop pop-3 press-stick {{vTap==='grammar' ? 'tap' : ''}}"
+          data-k="grammar" bindtap="onStatTap"
+          catchtouchstart="onStatDown" catchtouchend="onStatUp">
+      <view class="stat-emoji bg-mint">📚</view>
+      <view class="stat-num" style="color: var(--c-klein-deep);">{{grammarN}}</view>
+      <view class="stat-label">已掌握语法</view>
+      <view class="stat-pin pin-2"></view>
+    </view>
+
+    <!-- 错误记录 -->
+    <view class="stat-stick stick tilt-m pop pop-4 press-stick {{vTap==='error' ? 'tap' : ''}}"
+          data-k="error" bindtap="onStatTap"
+          catchtouchstart="onStatDown" catchtouchend="onStatUp">
+      <view class="stat-emoji bg-coral">📝</view>
+      <view class="stat-num" style="color: var(--c-klein);">{{errorN}}</view>
+      <view class="stat-label">错误记录</view>
+      <view class="stat-pin pin-3"></view>
+    </view>
+  </view>
+
+  <!-- ====== 综合进度条卡 ====== -->
+  <view class="stick progress-card pop pop-5">
+    <view class="pc-row">
+      <text class="pc-label">📈 综合达成率</text>
+      <text class="pc-num">{{overallPct}}%</text>
+    </view>
+    <view class="progress-track">
+      <view class="progress-fill" style="width: {{overallPct}}%;"></view>
+    </view>
+    <view class="pc-tags">
+      <text class="tag tag-klein" style="font-size:20rpx;padding:4rpx 16rpx;">Topik I 目标</text>
+      <text class="tag tag-mint" style="font-size:20rpx;padding:4rpx 16rpx;">每日30句</text>
+    </view>
+  </view>
+
+  <!-- ====== 已掌握语法 ====== -->
+  <view class="sec-head pop pop-6" wx:if="{{progress.grammar_mastered && progress.grammar_mastered.length}}">
+    <text class="sec-emoji">✅</text>
+    <text class="sec-title">掌握的语法</text>
+  </view>
+
+  <view class="stick tags-card pop pop-6" wx:if="{{progress.grammar_mastered && progress.grammar_mastered.length}}">
+    <view class="tag-cloud">
+      <text class="gram-tag" wx:for="{{progress.grammar_mastered}}" wx:key="*this">{{item}}</text>
+    </view>
+  </view>
+
+  <!-- ====== 弱点专项 ====== -->
+  <view class="sec-head pop pop-7" wx:if="{{progress.weak_points && progress.weak_points.length}}">
+    <text class="sec-emoji">🎯</text>
+    <text class="sec-title">弱点专项</text>
+  </view>
+
+  <view class="stick weak-card tilt-r pop pop-7" wx:if="{{progress.weak_points && progress.weak_points.length}}">
+    <view class="weak-title">老师帮你记下来咯</view>
+    <text class="weak-body">{{progress.weak_points}}</text>
+  </view>
+
+  <!-- ====== 最近错误 ====== -->
+  <view class="sec-head pop pop-8" wx:if="{{recentErrors.length}}">
+    <text class="sec-emoji">🔁</text>
+    <text class="sec-title">最近错误（会安排复习）</text>
+  </view>
+
+  <view class="error-list" wx:if="{{recentErrors.length}}">
+    <view class="stick error-item tilt-m pop pop-8" wx:for="{{recentErrors}}" wx:key="index">
+      <view class="err-left">
+        <text class="err-ico">❌</text>
+      </view>
+      <view class="err-body">
+        <view class="err-wrong-row">
+          <text class="err-label">写错</text>
+          <text class="err-wrong">{{item.wrong}}</text>
+        </view>
+        <view class="err-right-row">
+          <text class="err-label ok">正确</text>
+          <text class="err-right">{{item.right}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ====== 进度报告 ====== -->
+  <view class="stick report-card pop pop-8" wx:if="{{report}}">
+    <view class="rc-head">
+      <text class="rc-title">📈 进度报告</text>
+      <text class="tag tag-honey" style="font-size:20rpx;padding:4rpx 16rpx;">AI 生成</text>
+    </view>
+    <text class="rc-body" user-select space="pre-wrap">{{report}}</text>
+  </view>
+
+  <!-- ====== 底部操作按钮 ====== -->
+  <view class="bottom-ops">
+    <view class="btn-stick btn-honey press-stick {{genTap ? 'tap' : ''}}"
+          bindtap="onGenReport"
+          catchtouchstart="onGenDown" catchtouchend="onGenUp">
+      ✨ 生成进度报告
+    </view>
+    <view class="reset-btn press-bounce {{resetTap ? 'tap' : ''}}"
+          bindtap="onReset"
+          catchtouchstart="onResetDown" catchtouchend="onResetUp">
+      重置学习档案
+    </view>
+  </view>
+
+  <!-- ===== 留言给开发者（仅开发者可见） ===== -->
+  <view class="stick fb-card tilt-m pop pop-6">
+    <view class="fb-head">
+      <text class="fb-title">📝 留言给开发者</text>
+      <text class="fb-sub">只有开发者能看到</text>
+    </view>
+    <textarea
+      class="fb-input"
+      value="{{fbText}}"
+      placeholder="遇到问题、想加的功能、学习建议都可以写在这里…"
+      placeholder-class="fb-ph"
+      maxlength="500"
+      bindinput="onFeedbackInput"
+    ></textarea>
+    <view class="fb-send {{fbText ? '' : 'fb-send-off'}}" bindtap="onFeedbackSubmit">
+      {{fbSending ? '发送中…' : '发送留言'}}
+    </view>
+  </view>
+
+  <!-- ===== 管理员面板（长按版本号开启后可见） ===== -->
+  <block wx:if="{{isAdmin}}">
+    <view class="stick fb-card tilt-m pop pop-7">
+      <view class="fb-head">
+        <text class="fb-title">📢 发布公告</text>
+        <text class="fb-sub">所有用户在对话页可见</text>
+      </view>
+      <textarea
+        class="fb-input"
+        value="{{noticeDraft}}"
+        placeholder="写给所有用户的公告，例如：今晚 22:00 服务升级…"
+        placeholder-class="fb-ph"
+        maxlength="300"
+        bindinput="onNoticeDraftInput"
+      ></textarea>
+      <view class="fb-actions">
+        <view class="fb-btn fb-btn-primary" bindtap="onNoticePublish">📢 发布公告</view>
+        <view class="fb-btn fb-btn-plain" bindtap="onNoticeClear">撤下公告</view>
+      </view>
+    </view>
+
+    <view class="stick fb-card tilt-m pop pop-7">
+      <view class="fb-head">
+        <text class="fb-title">📥 用户留言</text>
+        <view class="fb-btn fb-btn-plain" bindtap="loadAdminMessages">刷新</view>
+      </view>
+      <view class="fb-list" wx:if="{{adminMessages.length}}">
+        <view class="fb-item" wx:for="{{adminMessages}}" wx:key="id">
+          <view class="fb-meta">
+            <text class="fb-nick">{{item.nickname || '匿名用户'}}</text>
+            <text class="fb-time">{{item.at}}</text>
+          </view>
+          <text class="fb-content" user-select>{{item.content}}</text>
+        </view>
+      </view>
+      <view wx:else class="fb-empty">{{adminLoading ? '加载中…' : '暂无留言'}}</view>
+    </view>
+  </block>
+
+  <view class="version-line" bindlongpress="onVersionLongPress">한국이 친구 v1.0</view>
+
+  <view style="height: calc(env(safe-area-inset-bottom) + 40rpx);"></view>
+</view>

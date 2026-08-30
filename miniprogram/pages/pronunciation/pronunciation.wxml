@@ -1,0 +1,192 @@
+<view class="page">
+  <!-- 贴纸装饰层（纯装饰，已置底不拦截点击） -->
+  <view class="sticker-layer">
+    <view class="sk sk-float-a" style="top:20rpx;right:-10rpx;">
+      <view class="sk-emoji" style="font-size:52rpx;">☁️</view>
+    </view>
+    <view class="sk sk-float-b" style="top:260rpx;left:8rpx;">
+      <view class="sk-emoji">🚗</view>
+    </view>
+    <view class="sk sk-float-c" style="bottom:260rpx;right:16rpx;">
+      <view class="sk-emoji">🍦</view>
+    </view>
+  </view>
+
+  <!-- ===== 顶部 Hero 卡 ===== -->
+  <view class="hero stick tilt-l pop pop-1">
+    <view class="hero-inner">
+      <view class="hero-text">
+        <view class="hero-top">
+          <text class="doodle-underline">발음</text> 연습 ✨
+        </view>
+        <view class="hero-mid">像韩国人一样读！</view>
+        <view class="hero-sub">
+          <view><text>🏆</text> 今日连续 {{streak || 0}} 天</view>
+          <view><text>🎯</text> 已掌握 {{mastered || 0}} 条</view>
+        </view>
+      </view>
+      <view class="vf stick-sm tilt-r">
+        <view class="vf-corner tl"></view>
+        <view class="vf-corner tr"></view>
+        <view class="vf-corner bl"></view>
+        <view class="vf-corner br"></view>
+        <view class="vf-target">🎯</view>
+        <view class="vf-scan"></view>
+        <view class="vf-tag">PRACTICE</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ===== 练习区 ===== -->
+  <view class="practice stick tilt-m pop pop-2">
+    <view class="practice-head">
+      <text class="section-title">现在练习</text>
+      <view class="level-tag tag tag-klein">{{aiTarget ? '来自 AI 对话' : currentLesson.level}}</view>
+    </view>
+
+    <view class="pron-envelope" bindtap="onToggleCurrent">
+      <view class="pron-main stick-sm tilt-m {{pronOpen ? 'open' : ''}}">
+        <view class="pm-row">
+          <view class="pm-ico tag tag-cream">{{aiTarget ? '🤖' : (currentLesson.emoji || '🗣️')}}</view>
+          <view class="pm-text" style="flex:1;">
+            <view class="pm-ko">{{aiTarget || currentLesson.text}}</view>
+            <view class="pm-zh">{{aiTarget ? '跟读这句话，AI 会给你评分' : currentLesson.zh}}</view>
+          </view>
+          <view class="pm-chevron">
+            <text>{{pronOpen ? '⌃' : '⌄'}}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 展开：罗马音 / 提示 / 播放 / 跟读 -->
+      <view class="pron-detail stick-sm tilt-l" wx:if="{{pronOpen}}">
+        <view class="pd-tag">{{aiTarget ? '跟读提示' : '罗马音 · Romanization'}}</view>
+        <view class="pd-romaji" wx:if="{{!aiTarget}}">{{currentLesson.roman}}</view>
+        <view class="pd-tip">
+          <text class="tip-icon">💡</text>
+          <text>{{aiTarget ? '先点「听标准」听一遍，再按住跟读。AI 会按发音、语调给你评分。' : currentLesson.tip}}</text>
+        </view>
+        <view class="pd-row">
+          <view class="btn-sm tag tag-klein" bindtap="onPlay">🔊 听标准</view>
+          <view
+            class="btn-sm tag tag-honey {{recording ? 'rec-on' : ''}} {{evaluating ? 'evaluating' : ''}}"
+            bindtouchstart="onRecStart"
+            bindtouchend="onRecEnd"
+          >{{evaluating ? '⏳ 评分中' : (recording ? '🔴 ' + recordTime + 's 松开结束' : '🎤 按住跟读')}}</view>
+          <view class="btn-sm tag tag-mint" bindtap="onEval" style="margin-left:auto;">✓ 我会了</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- AI 评分反馈 -->
+    <view class="eval-card stick-sm tilt-m" wx:if="{{lastEval}}">
+      <view class="eval-head">
+        <view class="eval-score">
+          <text class="s-num">{{lastEval.score || 0}}</text>
+          <text class="s-100">/100</text>
+        </view>
+        <view class="eval-verdict tag tag-honey" wx:if="{{lastEval.score >= 90}}">完美 🌟</view>
+        <view class="eval-verdict tag tag-klein" wx:elif="{{lastEval.score >= 70}}">不错 👍</view>
+        <view class="eval-verdict tag tag-coral" wx:else>加油 💪</view>
+      </view>
+      <view class="eval-asr" wx:if="{{lastEval.asr}}">🤖 AI 听到你说：{{lastEval.asr}}</view>
+      <view class="eval-tip" wx:if="{{lastEval.advice}}">{{lastEval.advice}}</view>
+      <view class="eval-feedback" wx:if="{{lastEval.feedback && lastEval.feedback.length}}">
+        <block wx:for="{{lastEval.feedback}}" wx:key="syl" wx:for-item="f">
+          <view class="fb-chip {{f.ok ? 'ok' : 'bad'}}">
+            <text class="fb-syl">{{f.syl}}</text>
+            <text class="fb-mark">{{f.ok ? '✓' : 'x'}}</text>
+          </view>
+        </block>
+      </view>
+    </view>
+
+    <!-- 录音浮层 -->
+    <view class="rec-mask" wx:if="{{recording}}">
+      <view class="rec-card stick tilt-m">
+        <view class="rec-badge tag tag-coral">GO!</view>
+        <view class="wavebars">
+          <view class="bar b1"></view>
+          <view class="bar b2"></view>
+          <view class="bar b3"></view>
+          <view class="bar b4"></view>
+          <view class="bar b5"></view>
+          <view class="bar b6"></view>
+          <view class="bar b7"></view>
+        </view>
+        <view class="rec-hint">读：{{aiTarget || currentLesson.text}}</view>
+        <view class="rec-sub">已录 {{recordTime}}s / 30s</view>
+        <view class="rec-stop" catchtap="onRecEnd">⏹ 结束并评分</view>
+        <view class="rec-tip">松开 🎤 或点上方按钮结束</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- ===== 课程列表 ===== -->
+  <view class="lessons pop pop-3">
+    <view class="lessons-head">
+      <text class="section-title">AI 为你定制的课程</text>
+      <view class="refresh-btn {{refreshing ? 'spinning' : ''}}" catchtap="onRefreshLessons">🔄 换一批</view>
+    </view>
+
+    <!-- 骨架屏 -->
+    <view class="cards-wrap" wx:if="{{lessonsLoading && !lessons.length}}">
+      <view class="card-wrap" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+        <view class="lesson-card skeleton-card">
+          <view class="sk-line sk-line-title"></view>
+          <view class="sk-line sk-line-sub"></view>
+        </view>
+      </view>
+    </view>
+
+    <view class="cards-wrap" wx:else>
+      <view wx:for="{{lessons}}" wx:key="id" class="card-wrap">
+        <view
+          class="lesson-card stick tilt-m {{index === currentIndex ? 'card-active' : ''}} {{openIndex === index ? 'card-open' : ''}}"
+          data-i="{{index}}"
+          data-id="{{item.id}}"
+          bindtap="onCardTap"
+        >
+          <view class="corner-lv lv-{{item.level === '入门' ? 'easy' : (item.level === '进阶' ? 'hard' : 'mid')}}">{{item.level}}</view>
+          <view class="pin"></view>
+          <view class="score-badge" wx:if="{{evalScores[item.text]}}">{{evalScores[item.text]}}分</view>
+
+          <view class="lc-head">
+            <view class="lc-emoji tag tag-cream">{{item.emoji || '📒'}}</view>
+            <view class="lc-title-group">
+              <view class="lc-ko">{{item.text}}</view>
+              <view class="lc-zh">{{item.zh}}</view>
+            </view>
+            <view class="lc-chv">{{openIndex === index ? '⌃' : '⌄'}}</view>
+          </view>
+
+          <view class="lc-detail" wx:if="{{openIndex === index}}">
+            <view class="lcd-romaji">
+              <text class="lcd-label">罗马音</text>
+              <text class="lcd-val">{{item.roman}}</text>
+            </view>
+            <view class="lcd-tip">
+              <text class="tip-icon">💡</text>
+              <text>{{item.tip}}</text>
+            </view>
+            <view class="lcd-actions">
+              <view
+                class="btn-sm tag tag-klein"
+                data-id="{{item.id}}"
+                catchtap="onCardPlay"
+              >🔊 听</view>
+              <view
+                class="btn-sm tag tag-coral"
+                data-i="{{index}}"
+                catchtap="onCardGo"
+                style="margin-left:auto;"
+              >🎯 练它</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view style="height: calc(env(safe-area-inset-bottom) + 40rpx);"></view>
+</view>

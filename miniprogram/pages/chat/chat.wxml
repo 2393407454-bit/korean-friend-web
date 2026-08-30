@@ -1,0 +1,171 @@
+<view class="page">
+  <!-- 贴纸装饰层（纯装饰，置底） -->
+  <view class="sticker-layer">
+    <view class="sk sk-float-a" style="top:30rpx;left:-10rpx;">
+      <view class="sk-emoji">🤖</view>
+    </view>
+    <view class="sk sk-float-c" style="bottom:300rpx;left:20rpx;">
+      <view class="sk-emoji">🐻‍❄️</view>
+    </view>
+  </view>
+
+  <!-- 公告横幅（管理员发布，全员可见） -->
+  <view class="notice-bar" wx:if="{{notice}}">
+    <view class="notice-body">
+      <text class="notice-tag">📢 公告</text>
+      <text class="notice-text" user-select>{{notice.content}}</text>
+    </view>
+    <view class="notice-close" bindtap="onNoticeClose">✕</view>
+  </view>
+
+  <!-- ===== 角色状态栏 ===== -->
+  <view class="statusbar stick">
+    <view class="sb-avatar" bindtap="onAvatarTap">
+      <text>{{character.avatar}}</text>
+      <view class="sb-avatar-hint">换</view>
+    </view>
+    <view class="sb-main">
+      <view class="sb-name">{{character.name}}</view>
+      <view class="sb-status">
+        <view class="status-dot {{status === 'typing' ? 'dot-typing' : ''}}"></view>
+        <text>{{character.tagline}} · {{status === 'typing' ? '输入中…' : '在线倾听中'}}</text>
+      </view>
+    </view>
+    <view class="sb-new" bindtap="onNewSession">🔄 新对话</view>
+  </view>
+
+  <!-- ===== 模式切换 ===== -->
+  <scroll-view class="modes" scroll-x enable-flex>
+    <view
+      wx:for="{{modes}}"
+      wx:key="label"
+      class="chip {{currentMode === item.label ? 'chip-on' : ''}}"
+      data-mode="{{item}}"
+      bindtap="onModeTap"
+    >{{item.label}}</view>
+  </scroll-view>
+
+  <!-- ===== 话题模板 ===== -->
+  <scroll-view class="topics" scroll-x enable-flex>
+    <view
+      wx:for="{{topics}}"
+      wx:key="label"
+      class="topic-chip"
+      data-topic="{{item}}"
+      bindtap="onTopicTap"
+    >{{item.label}}</view>
+  </scroll-view>
+
+  <!-- ===== 消息流 ===== -->
+  <scroll-view
+    class="messages"
+    scroll-y
+    scroll-into-view="{{scrollInto}}"
+    bindscroll="onMsgScroll"
+    enhanced
+    show-scrollbar="{{false}}"
+  >
+    <view
+      wx:for="{{messages}}"
+      wx:key="id"
+      id="msg-{{index}}"
+      class="bubble-row {{item.role}} msg-pop"
+    >
+      <view class="ava ava-asst" wx:if="{{item.role === 'assistant'}}">{{character.avatar}}</view>
+
+      <view class="bubble {{item.role}} {{item.pending ? 'pending' : ''}}">
+        <!-- 等待首字 -->
+        <block wx:if="{{item.pending}}">
+          <view class="pending-inner">
+            <text class="pending-label">老师在想</text>
+            <view class="dots"><view class="d"></view><view class="d"></view><view class="d"></view></view>
+          </view>
+        </block>
+
+        <!-- 富文本渲染（完成后） -->
+        <block wx:elif="{{item.blocks && item.blocks.length}}">
+          <view wx:for="{{item.blocks}}" wx:key="index" wx:for-item="blk" wx:for-index="bi">
+            <view wx:if="{{blk.type === 'code'}}" class="codeblock">
+              <view class="cb-head" wx:if="{{blk.lang}}">{{blk.lang}}</view>
+              <text class="cb-body" user-select>
+                <text wx:for="{{blk.segs}}" wx:key="index" wx:for-item="seg" class="sg-{{seg.s}}">{{seg.t}}</text>
+              </text>
+            </view>
+            <view wx:else class="line">
+              <text user-select space="pre-wrap">
+                <text wx:for="{{blk.segs}}" wx:key="index" wx:for-item="seg" class="sg-{{seg.s}}">{{seg.t}}</text>
+              </text>
+            </view>
+          </view>
+
+          <!-- 操作条 -->
+          <view class="ops" wx:if="{{item.role === 'assistant'}}">
+            <view class="op tag tag-cream" data-speech="{{item.speech || item.text}}" bindtap="onSpeakTap">🔊 读</view>
+            <view class="op tag tag-paper" data-text="{{item.text}}" bindtap="onCopyTap">📋 复制</view>
+            <view
+              class="op tag tag-mint"
+              wx:if="{{item.korean && item.korean.length}}"
+              data-sentence="{{item.korean[0]}}"
+              bindtap="onFollowTap"
+            >🎤 跟读</view>
+          </view>
+        </block>
+
+        <!-- 流式打字中 / 纯文本 -->
+        <block wx:else>
+          <text user-select space="pre-wrap">{{item.text}}</text>
+        </block>
+      </view>
+
+      <view class="ava ava-user" wx:if="{{item.role === 'user'}}">🧑</view>
+    </view>
+
+    <view class="msg-end"></view>
+  </scroll-view>
+
+  <!-- ===== 录音浮层 ===== -->
+  <view class="rec-mask" wx:if="{{recording}}">
+    <view class="rec-card">
+      <view class="rec-badge tag tag-coral">LIVE</view>
+      <view class="wavebars">
+        <view class="bar b1"></view>
+        <view class="bar b2"></view>
+        <view class="bar b3"></view>
+        <view class="bar b4"></view>
+        <view class="bar b5"></view>
+        <view class="bar b6"></view>
+        <view class="bar b7"></view>
+      </view>
+      <view class="rec-hint">正在听你说韩语…</view>
+      <view class="rec-sub">已录 {{recordTime}}s / 30s</view>
+      <view class="rec-stop" bindtap="onVoiceEnd">⏹ 结束并识别</view>
+      <view class="rec-tip">松开 🎤 或点上方按钮结束</view>
+    </view>
+  </view>
+
+  <!-- ===== 底部输入栏 ===== -->
+  <view class="ibar">
+    <view class="ibtn" bindtap="onUploadTap">📎</view>
+    <view class="input-wrap">
+      <input
+        class="ti"
+        value="{{inputText}}"
+        placeholder="한국어로 / 用中文或韩语输入"
+        placeholder-class="ph"
+        confirm-type="send"
+        bindinput="onInput"
+        bindconfirm="onSend"
+      />
+    </view>
+    <view
+      class="ibtn ibtn-mic {{recording ? 'mic-on' : ''}}"
+      bindtouchstart="onVoiceStart"
+      bindtouchend="onVoiceEnd"
+    >🎤</view>
+    <view class="ibtn ibtn-tts {{ttsEnabled ? 'tts-on' : ''}}" bindtap="onTtsToggle">
+      <text wx:if="{{ttsEnabled}}">🔊</text>
+      <text wx:else>🔈</text>
+    </view>
+    <view class="isend {{inputText ? '' : 'isend-off'}}" bindtap="onSend">보내</view>
+  </view>
+</view>
