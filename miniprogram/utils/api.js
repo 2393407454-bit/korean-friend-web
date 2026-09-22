@@ -4,7 +4,7 @@ const config = require('./config');
 const TIMEOUT = 120000;
 
 function get(url) {
-  return new Promise((resolve, reject) => {
+  return whenReady().then(() => new Promise((resolve, reject) => {
     wx.request({
       url: config.BASE_URL + url,
       method: 'GET',
@@ -12,11 +12,11 @@ function get(url) {
       success: (res) => (res.statusCode < 400 ? resolve(res.data) : reject(res)),
       fail: reject
     });
-  });
+  }));
 }
 
 function post(url, data) {
-  return new Promise((resolve, reject) => {
+  return whenReady().then(() => new Promise((resolve, reject) => {
     wx.request({
       url: config.BASE_URL + url,
       method: 'POST',
@@ -25,12 +25,18 @@ function post(url, data) {
       success: (res) => (res.statusCode < 400 ? resolve(res.data) : reject(res)),
       fail: reject
     });
-  });
+  }));
 }
 
 // JSON body 里的 base64 帧走 request；文件走 uploadFile
+function whenReady() {
+  const app = getApp();
+  if (app && typeof app.whenUserReady === 'function') return app.whenUserReady();
+  return Promise.resolve(app && app.globalData && app.globalData.userId);
+}
+
 function uploadFile(url, filePath, formData) {
-  return new Promise((resolve, reject) => {
+  return whenReady().then(() => new Promise((resolve, reject) => {
     wx.uploadFile({
       url: config.BASE_URL + url,
       filePath,
@@ -47,7 +53,7 @@ function uploadFile(url, filePath, formData) {
       },
       fail: reject
     });
-  });
+  }));
 }
 
-module.exports = { get, post, uploadFile };
+module.exports = { get, post, uploadFile, whenReady };

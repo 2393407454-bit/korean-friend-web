@@ -1,0 +1,194 @@
+<view class="page">
+
+  <!-- ===== 顶部：品牌 + 等级 ===== -->
+  <view class="hero">
+    <view class="hero-left">
+      <view class="hero-title">오늘의 한국어</view>
+      <view class="hero-sub">{{dateLabel}} · AI 教练 Han 陪练中</view>
+    </view>
+    <view class="hero-level" bindtap="onGoBadge">
+      <view class="hl-badge {{level ? 'hl-on' : ''}}">
+        <text class="hl-ko">{{level || '未定级'}}</text>
+      </view>
+      <view class="hl-cap">{{level ? 'TOPIK 等级' : '完成测试解锁'}}</view>
+    </view>
+    <view class="hero-mark">한국어</view>
+  </view>
+
+  <!-- ===== AI 教练状态：把“下一步做什么”放在首屏 ===== -->
+  <view class="coach-signal" wx:if="{{!loading}}" aria-live="polite">
+    <view class="signal-orbit" aria-hidden="true"><view class="signal-core"></view><view class="signal-ring signal-ring-a"></view><view class="signal-ring signal-ring-b"></view></view>
+    <view class="signal-copy">
+      <view class="signal-eyebrow">AI COACH · {{goalDisplay || 'PERSONALIZED'}}</view>
+      <view class="signal-title">{{coachHeadline}}</view>
+      <view class="signal-sub">{{coachSubline}}</view>
+    </view>
+    <view class="signal-live">LIVE</view>
+  </view>
+
+  <!-- ===== 加载骨架 / 失败重试 ===== -->
+  <block wx:if="{{loading}}">
+    <view class="card skeleton-card">
+      <view class="sk-line sk-line-lg"></view>
+      <view class="sk-line"></view>
+      <view class="sk-line sk-line-sm"></view>
+    </view>
+    <view class="card skeleton-card">
+      <view class="sk-line"></view>
+      <view class="sk-line sk-line-sm"></view>
+    </view>
+  </block>
+
+  <view class="card error-card" wx:elif="{{loadFailed}}">
+    <view class="err-emoji">🛰️</view>
+    <view class="err-text">连接不到学习服务器</view>
+    <view class="err-sub">请确认后端已启动，或稍后再试</view>
+    <view class="btn-ghost" bindtap="onRetry">重新连接</view>
+  </view>
+
+  <block wx:else>
+    <!-- ===== 今日 AI 训练（核心卡） ===== -->
+    <view class="card today-card">
+      <view class="card-head">
+        <view class="ch-title">
+          <view class="dot-row"><view class="dot dot-blue"></view><view class="dot dot-red"></view><view class="dot dot-ink"></view></view>
+          <text class="ch-name">今日 AI 训练</text>
+        </view>
+        <view class="ch-tag">AI 定制</view>
+      </view>
+
+      <!-- 今日目标列表 -->
+      <view class="today-focus">
+        <view class="focus-kicker">{{focusLabel}}</view>
+        <view class="focus-value">{{focusValue}}</view>
+        <view class="focus-note">{{progressHint}}</view>
+      </view>
+
+      <view class="goal-list">
+        <view class="goal-row" wx:if="{{streakDays > 0}}">
+          <text class="goal-ico">🔥</text>
+          <text class="goal-k">连续学习</text>
+          <text class="goal-v">{{streakDays}} 天</text>
+        </view>
+        <view class="goal-row" wx:if="{{weekMinutes > 0}}">
+          <text class="goal-ico">⏱️</text>
+          <text class="goal-k">本周练习</text>
+          <text class="goal-v">{{weekMinutes}} 分钟</text>
+        </view>
+        <view class="goal-row">
+          <text class="goal-ico">🎤</text>
+          <text class="goal-k">口语练习</text>
+          <text class="goal-v">目标 15 分钟</text>
+        </view>
+        <view class="goal-row">
+          <text class="goal-ico">📖</text>
+          <text class="goal-k">重点语法</text>
+          <text class="goal-v {{weakPoints.length ? '' : 'goal-v-pending'}}">{{weakPoints[0] || '对话后自动生成'}}</text>
+        </view>
+        <view class="goal-row" wx:if="{{weakPoints.length > 1}}">
+          <text class="goal-ico">🧠</text>
+          <text class="goal-k">薄弱点</text>
+          <text class="goal-v">{{weakPoints[1]}}</text>
+        </view>
+        <view class="goal-row" wx:if="{{dueVocab > 0}}">
+          <text class="goal-ico">🔁</text>
+          <text class="goal-k">到期复习</text>
+          <text class="goal-v">{{dueVocab}} 个生词</text>
+        </view>
+      </view>
+
+      <view class="start-btn {{loading ? 'btn-off' : ''}}" bindtap="onStartToday">
+        <text>시작 开始今日训练</text>
+        <text class="start-arrow">→</text>
+      </view>
+    </view>
+
+    <!-- ===== 我的韩语能力 ===== -->
+    <view class="card ability-card">
+      <view class="card-head">
+        <view class="ch-title"><text class="ch-name">我的韩语能力</text></view>
+        <view class="ch-tag ch-tag-plain">数据驱动 · 不虚构</view>
+      </view>
+      <view class="ability-caption">每个分数都来自真实对话、纠错或跟读记录</view>
+
+      <view class="ability-overall">
+        <view class="ao-main">
+          <text class="ao-num">{{overall == null ? '—' : overall}}</text>
+          <text class="ao-unit" wx:if="{{overall != null}}">/ 100</text>
+        </view>
+        <view class="ao-side">
+          <view class="ao-t1" wx:if="{{overall != null}}">综合评分</view>
+          <view class="ao-t1" wx:else>综合评分 · 待评估</view>
+          <view class="ao-t2">{{overall == null ? '完成测试与训练后解锁' : (overallBasis || '')}}</view>
+        </view>
+      </view>
+
+      <view class="dims">
+        <view class="dim-row" wx:for="{{dims}}" wx:key="key">
+          <text class="dim-ico">{{item.icon}}</text>
+          <text class="dim-label">{{item.label}}</text>
+          <view class="dim-val {{item.hasScore ? 'dim-on' : 'pending'}}">
+            <text wx:if="{{item.hasScore}}">{{item.score}}<text class="dim-unit"> / 100</text></text>
+            <text wx:else>待评估</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== 学习闭环叙事 ===== -->
+    <view class="card loop-card">
+      <view class="loop-title">AI 不陪你聊天，AI 陪你成长</view>
+      <view class="loop-row">
+        <view class="loop-step">
+          <view class="loop-ico">🔍</view>
+          <view class="loop-t">测试</view>
+          <view class="loop-s">发现水平</view>
+        </view>
+        <view class="loop-arrow">→</view>
+        <view class="loop-step">
+          <view class="loop-ico">🧠</view>
+          <view class="loop-t">分析</view>
+          <view class="loop-s">定位薄弱点</view>
+        </view>
+        <view class="loop-arrow">→</view>
+        <view class="loop-step">
+          <view class="loop-ico">🎯</view>
+          <view class="loop-t">训练</view>
+          <view class="loop-s">记忆错误</view>
+        </view>
+        <view class="loop-arrow">→</view>
+        <view class="loop-step">
+          <view class="loop-ico">📈</view>
+          <view class="loop-t">进步</view>
+          <view class="loop-s">能力可视</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== 最近纠错（有数据才显示） ===== -->
+    <view class="card" wx:if="{{recentErrors.length}}">
+      <view class="card-head">
+        <view class="ch-title"><text class="ch-name">最近一次纠正</text></view>
+        <view class="ch-tag ch-tag-plain">自动记忆</view>
+      </view>
+      <view class="fix-row">
+        <text class="fix-wrong">{{recentErrors[0].wrong || ''}}</text>
+        <text class="fix-arrow">→</text>
+        <text class="fix-right">{{recentErrors[0].right || ''}}</text>
+      </view>
+      <view class="fix-note">{{recentErrors[0].note || ''}}</view>
+    </view>
+  </block>
+
+  <!-- ===== 演示模式入口（比赛用 · 预置剧本，无需 LLM；后端不可达时点击会得到明确提示） ===== -->
+  <view class="demo-entry" wx:if="{{!loading}}" bindtap="onDemoEntry">
+    <text class="de-ico">🗂️</text>
+    <view class="de-txt">
+      <view class="de-t1">演示模式</view>
+      <view class="de-t2">3 分钟预置剧本 · 无需 AI 接口 · 数据与真实档案隔离</view>
+    </view>
+    <text class="de-arrow">→</text>
+  </view>
+
+  <view style="height: calc(env(safe-area-inset-bottom) + 48rpx);"></view>
+</view>

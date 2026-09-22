@@ -1,7 +1,9 @@
 {
   "pages": [
+    "pages/home/home",
     "pages/chat/chat",
     "pages/pronunciation/pronunciation",
+    "pages/song/song",
     "pages/quotes/quotes",
     "pages/profile/profile"
   ],
@@ -18,6 +20,7 @@
     "backgroundColor": "#FFFFFF",
     "borderStyle": "white",
     "list": [
+      { "pagePath": "pages/home/home",        "text": "오늘 · 今日" },
       { "pagePath": "pages/chat/chat",          "text": "대화 · 对话" },
       { "pagePath": "pages/pronunciation/pronunciation", "text": "발음 · 发音" },
       { "pagePath": "pages/quotes/quotes",      "text": "명대사 · 名句" },

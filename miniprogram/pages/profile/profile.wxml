@@ -121,19 +121,44 @@
     </view>
   </view>
 
-  <!-- ====== 综合进度条卡 ====== -->
-  <view class="stick progress-card pop pop-5">
-    <view class="pc-row">
-      <text class="pc-label">📈 综合达成率</text>
-      <text class="pc-num">{{overallPct}}%</text>
+  <!-- ====== 我的韩语能力（真实评分 + 手写雷达图/趋势，Phase 11） ====== -->
+  <view class="stick ab-card pop pop-5">
+    <view class="ab-head">
+      <view class="sec-head-inline">
+        <text class="sec-emoji">📊</text>
+        <text class="sec-title">我的韩语能力</text>
+      </view>
+      <text class="tag tag-klein" style="font-size:20rpx;padding:4rpx 16rpx;">数据驱动</text>
     </view>
-    <view class="progress-track">
-      <view class="progress-fill" style="width: {{overallPct}}%;"></view>
+
+    <view class="ab-overall">
+      <text class="ab-num">{{abOverall == null ? '—' : abOverall}}</text>
+      <view class="ab-overall-side">
+        <view class="ab-overall-t">{{abOverall == null ? '综合评分 · 待评估' : '综合评分'}}</view>
+        <view class="ab-overall-b">{{abOverall == null ? '完成测试与训练后解锁' : abBasis}}</view>
+      </view>
     </view>
-    <view class="pc-tags">
-      <text class="tag tag-klein" style="font-size:20rpx;padding:4rpx 16rpx;">Topik I 目标</text>
-      <text class="tag tag-mint" style="font-size:20rpx;padding:4rpx 16rpx;">每日30句</text>
+
+    <canvas type="2d" id="radarCanvas" class="radar-canvas"></canvas>
+
+    <view class="ab-dims">
+      <view class="ab-dim" wx:for="{{abDims}}" wx:key="key">
+        <view class="ab-dim-row">
+          <text class="ab-dim-label">{{item.label}}</text>
+          <view class="ab-bar">
+            <view class="ab-bar-fill" style="width: {{item.score == null ? 0 : item.score}}%;"></view>
+          </view>
+          <text class="ab-dim-score {{item.score == null ? 'pending' : ''}}">{{item.score == null ? '待评估' : item.score}}</text>
+        </view>
+        <view class="ab-dim-basis" wx:if="{{item.basis}}">{{item.basis}}</view>
+      </view>
     </view>
+
+    <view class="ab-trend" wx:if="{{historyOk}}">
+      <view class="ab-trend-title">综合能力趋势</view>
+      <canvas type="2d" id="trendCanvas" class="trend-canvas"></canvas>
+    </view>
+    <view class="ab-trend-empty" wx:else>完成两次以上评估后，这里会显示能力变化趋势</view>
   </view>
 
   <!-- ====== 已掌握语法 ====== -->
@@ -156,7 +181,9 @@
 
   <view class="stick weak-card tilt-r pop pop-7" wx:if="{{progress.weak_points && progress.weak_points.length}}">
     <view class="weak-title">老师帮你记下来咯</view>
-    <text class="weak-body">{{progress.weak_points}}</text>
+    <view class="weak-points">
+      <text class="weak-point" wx:for="{{progress.weak_points}}" wx:key="*this">{{item}}</text>
+    </view>
   </view>
 
   <!-- ====== 最近错误 ====== -->
@@ -168,28 +195,86 @@
   <view class="error-list" wx:if="{{recentErrors.length}}">
     <view class="stick error-item tilt-m pop pop-8" wx:for="{{recentErrors}}" wx:key="index">
       <view class="err-left">
-        <text class="err-ico">❌</text>
+        <text class="err-ico {{item.status === 'mastered' ? 'err-ico-mastered' : ''}}">{{item.status === 'mastered' ? '✅' : '❌'}}</text>
       </view>
       <view class="err-body">
         <view class="err-wrong-row">
-          <text class="err-label">写错</text>
-          <text class="err-wrong">{{item.wrong}}</text>
+          <text class="err-label" wx:if="{{item.status !== 'mastered'}}">写错</text>
+          <text class="err-label err-label-ok" wx:else>已掌握</text>
+          <text class="err-wrong {{item.status === 'mastered' ? 'err-wrong-mastered' : ''}}">{{item.wrong}}</text>
         </view>
         <view class="err-right-row">
           <text class="err-label ok">正确</text>
           <text class="err-right">{{item.right}}</text>
         </view>
+        <view class="err-point-row" wx:if="{{item.point}}">
+          <text class="err-point-tag">{{item.point}}</text>
+          <text class="err-point-note" wx:if="{{item.status === 'mastered'}}">已脱离薄弱点列表</text>
+        </view>
       </view>
     </view>
   </view>
 
-  <!-- ====== 进度报告 ====== -->
-  <view class="stick report-card pop pop-8" wx:if="{{report}}">
+  <!-- ====== 结构化学习报告（Phase 10：真实数据 + AI 评语可选） ====== -->
+  <view class="stick report-card pop pop-8" wx:if="{{reportData}}">
     <view class="rc-head">
-      <text class="rc-title">📈 进度报告</text>
-      <text class="tag tag-honey" style="font-size:20rpx;padding:4rpx 16rpx;">AI 生成</text>
+      <text class="rc-title">📈 오늘의 학습 리포트</text>
+      <text class="tag tag-honey" style="font-size:20rpx;padding:4rpx 16rpx;">真实数据</text>
     </view>
-    <text class="rc-body" user-select space="pre-wrap">{{report}}</text>
+
+    <!-- 本周数据 -->
+    <view class="rp-stats">
+      <view class="rp-stat">
+        <text class="rp-num">{{reportData.week.minutes_est}}</text>
+        <text class="rp-k">本周练习分钟(估)</text>
+      </view>
+      <view class="rp-stat">
+        <text class="rp-num">{{reportData.week.turns}}</text>
+        <text class="rp-k">对话轮数</text>
+      </view>
+      <view class="rp-stat">
+        <text class="rp-num">{{reportData.streak}}</text>
+        <text class="rp-k">连续天数</text>
+      </view>
+      <view class="rp-stat">
+        <text class="rp-num">{{reportData.week.pron}}</text>
+        <text class="rp-k">跟读次数</text>
+      </view>
+    </view>
+
+    <!-- 能力变化趋势 -->
+    <view class="rp-sec" wx:if="{{reportData.trend.length}}">
+      <view class="rp-sec-t">能力变化趋势</view>
+      <view class="rp-trend-row" wx:for="{{reportData.trend}}" wx:key="key">
+        <text class="rp-t-label">{{item.label}}</text>
+        <text class="rp-t-from">{{item.from}}</text>
+        <text class="rp-t-arrow">→</text>
+        <text class="rp-t-to">{{item.to}}</text>
+        <text class="rp-t-delta {{item.delta >= 0 ? 'up' : 'down'}}">{{item.delta >= 0 ? '↑+' : '↓'}}{{item.delta}}</text>
+      </view>
+    </view>
+
+    <!-- 未掌握高频错误 -->
+    <view class="rp-sec" wx:if="{{reportData.top_errors.length}}">
+      <view class="rp-sec-t">高频待掌握错误（会继续安排专项训练）</view>
+      <view class="rp-err" wx:for="{{reportData.top_errors}}" wx:key="wrong">
+        <text class="rp-err-point">{{item.point}}</text>
+        <text class="rp-err-count">×{{item.count}}</text>
+        <text class="rp-err-fix">{{item.wrong}} → {{item.right}}</text>
+      </view>
+    </view>
+
+    <!-- AI 评语与下次重点（可选增强） -->
+    <view class="rp-ai" wx:if="{{reportData.ai_comment}}">
+      <view class="rp-ai-tag">AI 评语</view>
+      <text class="rp-ai-body">{{reportData.ai_comment}}</text>
+    </view>
+    <view class="rp-ai" wx:if="{{reportData.next_focus.length}}">
+      <view class="rp-ai-tag">下次重点</view>
+      <view class="rp-focus-row">
+        <text class="rp-focus" wx:for="{{reportData.next_focus}}" wx:key="*this">{{item}}</text>
+      </view>
+    </view>
   </view>
 
   <!-- ====== 底部操作按钮 ====== -->
@@ -264,7 +349,7 @@
     </view>
   </block>
 
-  <view class="version-line" bindlongpress="onVersionLongPress">한국이 친구 v1.0</view>
+  <view class="version-line" bindlongpress="onVersionLongPress">한국어 친구 v1.0</view>
 
   <view style="height: calc(env(safe-area-inset-bottom) + 40rpx);"></view>
 </view>

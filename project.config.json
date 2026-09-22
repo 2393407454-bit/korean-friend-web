@@ -1,10 +1,12 @@
 {
+  "miniprogramRoot": "miniprogram/",
   "setting": {
     "es6": true,
     "postcss": true,
     "minified": true,
     "uglifyFileName": false,
     "enhance": true,
+    "urlCheck": false,
     "packNpmRelationList": [],
     "babelSetting": {
       "ignore": [],

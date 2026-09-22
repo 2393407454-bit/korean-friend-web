@@ -75,10 +75,11 @@ async function checkText(text) {
       content: text.slice(0, 2500)
     });
     if (out.errcode === 0 && out.result) return out.result.suggest === 'pass';
-    return true; // 检测通道异常时不拦截，避免误伤
+    return process.env.NODE_ENV !== 'production';
   } catch (e) {
     console.warn('[security] msgSecCheck 失败：', e.message);
-    return true;
+    // 开发环境允许继续体验；生产环境 fail-closed，避免安全检测失效时放行 UGC。
+    return process.env.NODE_ENV !== 'production';
   }
 }
 

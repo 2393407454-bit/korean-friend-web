@@ -13,3 +13,13 @@ node_modules/
 # ===== 系统文件 =====
 .DS_Store
 */.DS_Store
+
+# ===== 本地工具产物 / 会话状态（不参与版本控制）=====
+.mimosa/
+server/.mimosa/
+.workbuddy-ai/
+*.continue.json
+
+# ===== 微信开发者工具本地配置 =====
+project.private.config.json
+miniprogram/project.private.config.json

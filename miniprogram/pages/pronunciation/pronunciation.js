@@ -27,6 +27,7 @@ Page({
     openIndex: -1,
     streak: 0,
     mastered: 0,
+    pronTrend: [], // 最近 5 次真实评分（能力画像 pron_eval_log）
     recording: false,
     recordTime: 0,
     evaluating: false,
@@ -39,8 +40,10 @@ Page({
   onLoad() {
     this.recorder = wx.getRecorderManager();
     this._bindRecorder();
-    this.loadStats();
-    this.loadLessons(false);
+    api.whenReady().then(() => {
+      this.loadStats();
+      this.loadLessons(false);
+    });
   },
 
   onShow() {
@@ -65,18 +68,47 @@ Page({
   },
 
   _bindRecorder() {
-    this.recorder.onStop((res) => this._onRecStop(res));
+    if (!this.recorder) return;
+    app.globalData.recorderOwner = this;
+    if (this._recorderBound) return;
+    this._recorderStopHandler = this._recorderStopHandler || ((res) => {
+      if (app.globalData.recorderOwner === this) this._onRecStop(res);
+    });
+    this.recorder.onStop(this._recorderStopHandler);
+    this._recorderBound = true;
+  },
+
+  _unbindRecorder() {
+    if (app.globalData.recorderOwner === this) app.globalData.recorderOwner = null;
+    if (!this.recorder || !this._recorderBound) return;
+    if (typeof this.recorder.offStop === 'function') {
+      this.recorder.offStop(this._recorderStopHandler);
+      this._recorderBound = false;
+    }
+  },
+
+  onHide() {
+    this._unbindRecorder();
   },
 
   onUnload() {
+    this._unbindRecorder();
     this._clearRecTimer();
   },
 
   loadStats() {
+    // 真实连续天数 + 最近评分趋势：来自能力画像（后端每日统计与跟读评分落库）
+    api.get('/api/abilities/' + app.globalData.userId).then((res) => {
+      if (!res || !res.stats) return;
+      this.setData({
+        streak: res.stats.streak_days || 0,
+        pronTrend: (res.pronLog || []).map((e) => e.score).slice(-5)
+      });
+    }).catch(() => {});
+    // 「我会了」计数：来自真实落库的用户标记记录
     api.get('/api/profile/' + app.globalData.userId).then((res) => {
       const pm = res.progress || {};
-      const mastered = (pm.grammar_mastered || []).length + (pm.vocab || []).length;
-      this.setData({ mastered, streak: pm.streak_days || 0 });
+      this.setData({ mastered: (pm.pron_mastered || []).length });
     }).catch(() => {});
   },
 
@@ -120,6 +152,10 @@ Page({
   /* === 按住跟读：真实录音 + 计时 === */
   onRecStart() {
     if (this.data.recording || this.data.evaluating) return;
+    if (!app.globalData.serverCaps.asr) {
+      wx.showToast({ title: '语音不可用：后端未配置 ASR', icon: 'none' });
+      return;
+    }
     this.setData({ recording: true, recordTime: 0, lastEval: null });
     this._startRecTimer();
     this.recorder.start({
@@ -156,23 +192,25 @@ Page({
       }
       return;
     }
-    // 真实 AI 评分：录音 → 后端 ASR 识别 → AI 发音教练评价
+    // 真实 AI 评分：录音 → 后端 ASR 识别 → AI 发音教练评价（结果落库进能力画像）
     const target = this._currentTarget();
     this.setData({ evaluating: true });
     wx.showLoading({ title: 'AI 评分中…' });
     api
-      .uploadFile('/api/pronounce', res.tempFilePath, { target })
+      .uploadFile('/api/pronounce', res.tempFilePath, { target, userId: app.globalData.userId })
       .then((data) => {
         wx.hideLoading();
         const evalScores = { ...this.data.evalScores, [target]: data.score };
         this.setData({
           evaluating: false,
           evalScores,
+          pronTrend: this.data.pronTrend.concat([data.score]).slice(-5),
           lastEval: {
             score: data.score,
             advice: data.advice || '',
             feedback: data.feedback || [],
-            asr: data.asr_text || ''
+            asr: data.asr_text || '',
+            src: data.source || 'ai'
           }
         });
         wx.vibrateShort && wx.vibrateShort({ type: 'light' });
@@ -184,12 +222,25 @@ Page({
       });
   },
 
-  /* === 我会了 === */
+  /* === 我会了（真实落库，不编造） === */
   onEval() {
-    const curr = this.data.currentLesson;
-    this.setData({ mastered: this.data.mastered + 1 });
-    wx.showToast({ title: '已掌握：' + curr.text, icon: 'none' });
+    const target = this._currentTarget();
+    api
+      .post('/api/pronounce/mastered', { userId: app.globalData.userId, target })
+      .then((res) => {
+        this.setData({ mastered: (res && res.mastered) || this.data.mastered });
+        wx.showToast({ title: '已掌握：' + target.slice(0, 14), icon: 'none' });
+        wx.vibrateShort && wx.vibrateShort({ type: 'light' });
+      })
+      .catch(() => {
+        wx.showToast({ title: '未同步：请检查网络后重试', icon: 'none' });
+      });
+  },
+
+  /* === 再试一次 === */
+  onRetryPron() {
     wx.vibrateShort && wx.vibrateShort({ type: 'light' });
+    wx.showToast({ title: '按住 🎤 再来一次', icon: 'none', duration: 1200 });
   },
 
   /* === 课程卡片 === */
@@ -221,5 +272,10 @@ Page({
     }, () => {
       wx.pageScrollTo({ scrollTop: 0, duration: 300 });
     });
+  },
+
+  /* K-pop 学歌入口 */
+  onGoSong() {
+    wx.navigateTo({ url: '/pages/song/song' });
   }
 });

@@ -1,0 +1,187 @@
+<view class="page">
+
+  <!-- ===== 步骤一：追星女无痛学歌入口 ===== -->
+  <block wx:if="{{step === 'upload'}}">
+    <view class="stick fan-hero pop pop-0">
+      <view class="fan-kicker">追星女无痛学韩语</view>
+      <view class="fan-title">把本命歌词，变成你的韩语课</view>
+      <view class="fan-sub">不啃语法书，先把最想唱的那一句学会。</view>
+      <view class="fan-goals">
+        <view class="fan-goal {{fanGoal === '副歌听懂' ? 'fan-goal-on' : ''}}" data-goal="副歌听懂" bindtap="onPickFanGoal">副歌听懂</view>
+        <view class="fan-goal {{fanGoal === '跟唱一遍' ? 'fan-goal-on' : ''}}" data-goal="跟唱一遍" bindtap="onPickFanGoal">跟唱一遍</view>
+        <view class="fan-goal {{fanGoal === '收藏生词' ? 'fan-goal-on' : ''}}" data-goal="收藏生词" bindtap="onPickFanGoal">收藏生词</view>
+      </view>
+      <view class="fan-progress-row">
+        <view class="fan-progress-copy"><text class="fan-count">{{todayCount}}/{{todayGoal}}</text><text>句今日轻任务 · 连续 {{fanStreak}} 天</text></view>
+        <view class="fan-progress"><view class="fan-progress-fill" style="width: {{todayPercent}}%;"></view></view>
+      </view>
+      <view class="fan-checkin {{todayCount >= todayGoal ? 'fan-checkin-done' : ''}}" bindtap="onFanCheckin">{{todayCount >= todayGoal ? '今天已完成，明天继续' : '完成一句就打卡'}}</view>
+    </view>
+
+    <view class="stick card pop pop-1">
+      <view class="card-head">
+        <view class="ch-title"><text class="ch-emoji">🎤</text><text class="ch-name">做一张本命歌词卡</text></view>
+        <view class="ch-tag">{{fanGoal}}</view>
+      </view>
+      <view class="card-sub">上传歌词原文后，AI 只分析你提供的内容：拆成“韩文 + 罗马音 + 中文 + 语法 + 重点词”，不会根据歌名或歌词片段猜测其他歌词。</view>
+
+      <view class="up-actions">
+        <view class="up-btn up-btn-main" bindtap="onChooseImage">
+          <text class="up-ico">📷</text>
+          <text>拍歌词图</text>
+        </view>
+        <view class="up-btn" bindtap="onChooseLrcFile">
+          <text class="up-ico">📃</text>
+          <text>上传 LRC</text>
+        </view>
+        <view class="up-btn" bindtap="onAnalyzeText">
+          <text class="up-ico">📄</text>
+          <text>粘贴内容</text>
+        </view>
+      </view>
+
+      <textarea
+        class="lyric-input"
+        value="{{lyricText}}"
+        placeholder="先写歌名 - 歌手，再粘贴最想学的 3～8 句歌词…"
+        placeholder-class="lyric-ph"
+        maxlength="3000"
+        bindinput="onLyricInput"
+      ></textarea>
+
+      <view class="analyze-err" wx:if="{{analyzeError}}">{{analyzeError}}</view>
+    </view>
+
+    <!-- 分析中 -->
+    <view class="stick card pop pop-1" wx:if="{{analyzing}}" aria-live="polite">
+      <view class="ai-thinking">
+        <view class="ai-dots"><text>●</text><text>●</text><text>●</text></view>
+        <view class="ai-text">{{analyzeMode === 'image' ? '正在读取歌词图…' : (analyzeMode === 'file' ? '正在分析 LRC 原文…' : '正在分析你粘贴的内容…')}}</view>
+      </view>
+    </view>
+
+    <!-- 我的歌曲：先搜到，再继续学 -->
+    <view class="stick card song-library pop pop-2" wx:if="{{mySongs.length}}">
+      <view class="card-head">
+        <view class="ch-title"><text class="ch-name">我的歌词卡</text></view>
+        <view class="ch-tag ch-tag-plain">{{mySongs.length}} 首</view>
+      </view>
+      <view class="song-search">
+        <text class="song-search-ico">⌕</text>
+        <input class="song-search-input" value="{{songQuery}}" placeholder="搜索歌名 / 歌手" placeholder-class="form-ph" bindinput="onSongQuery" />
+      </view>
+      <view class="song-empty" wx:if="{{!filteredSongs.length}}">没有找到这首，直接在上面添加歌词就好</view>
+      <view class="song-row" wx:for="{{filteredSongs}}" wx:key="id" data-id="{{item.id}}" bindtap="onOpenSong">
+        <text class="song-row-ico">🎵</text>
+        <view class="song-row-txt">
+          <view class="song-row-t">{{item.title}}</view>
+          <view class="song-row-s">{{item.artist || '未知歌手'}} · {{item.lineCount}} 句</view>
+        </view>
+        <view class="song-row-delete" data-id="{{item.id}}" data-title="{{item.title}}" catchtap="onDeleteSong">删除</view>
+        <text class="song-row-arrow">→</text>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 步骤二：确认歌名（AI 候选 → 用户拍板）===== -->
+  <block wx:if="{{step === 'confirm'}}">
+    <view class="stick card pop pop-0">
+      <view class="card-head">
+        <view class="ch-title"><text class="ch-name">确认歌曲信息</text></view>
+        <view class="ch-tag ch-tag-plain">你拍板 · AI 不瞎猜</view>
+      </view>
+      <view class="card-sub">先选对本命，再轻松学几句。AI 给出的 {{candidates.length || '0'}} 个候选只是参考，歌名以你确认为准：</view>
+
+      <view class="cand-list" wx:if="{{candidates.length}}">
+        <view class="cand-chip" wx:for="{{candidates}}" wx:key="title" data-i="{{index}}" bindtap="onPickCandidate">
+          <text class="cand-t">{{item.title}}</text>
+          <text class="cand-a" wx:if="{{item.artist}}">· {{item.artist}}</text>
+          <text class="cand-c" wx:if="{{item.confidenceText}}">{{item.confidenceText}}</text>
+        </view>
+      </view>
+
+      <view class="form-row">
+        <text class="form-k">歌名</text>
+        <input class="form-v" value="{{titleInput}}" placeholder="输入歌名（必填）" placeholder-class="form-ph" bindinput="onTitleInput" />
+      </view>
+      <view class="form-row">
+        <text class="form-k">歌手</text>
+        <input class="form-v" value="{{artistInput}}" placeholder="选填" placeholder-class="form-ph" bindinput="onArtistInput" />
+      </view>
+
+      <view class="song-summary" wx:if="{{summary}}"><text class="summary-label">内容总结</text>{{summary}}</view>
+      <view class="preview">已做好 {{lines.length}} 句歌词卡，今天先学 3 句就好</view>
+
+      <view class="confirm-btns">
+        <view class="btn-ghost" bindtap="onBackUpload">重新分析</view>
+        <view class="confirm-btn {{saving ? 'btn-off' : ''}}" bindtap="onSaveSong">{{saving ? '保存中…' : '保存并开始学习 →'}}</view>
+      </view>
+    </view>
+  </block>
+
+  <!-- ===== 步骤三：歌词学习 ===== -->
+  <block wx:if="{{step === 'study'}}">
+    <view class="stick card study-head pop pop-0">
+      <view class="sh-top">
+        <view class="sh-title">
+          <text class="sh-ico">🎵</text>
+          <view class="sh-txt">
+            <view class="sh-t">{{titleInput}}</view>
+            <view class="sh-a" wx:if="{{artistInput}}">{{artistInput}}</view>
+          </view>
+        </view>
+        <view class="sh-opts">
+          <view class="sh-opt {{showRoman ? 'sh-opt-on' : ''}}" bindtap="onToggleRoman">罗马音</view>
+          <view class="sh-opt" bindtap="onNewSong">新歌</view>
+        </view>
+      </view>
+      <view class="sh-hint">先听懂一句，再跟唱一句；点单词即可收藏到生词本</view>
+      <view class="study-mini-progress">
+        <view><text class="study-mini-num">{{todayCount}}/{{todayGoal}}</text><text class="study-mini-cap">今日轻任务</text></view>
+        <view class="study-mini-action" bindtap="onFanCheckin">{{todayCount >= todayGoal ? '已完成' : '打卡这一句'}}</view>
+      </view>
+    </view>
+
+    <view class="song-line stick card pop pop-1" wx:for="{{lines}}" wx:key="_i">
+      <view class="sl-main" data-i="{{index}}" bindtap="onSpeakLine">
+        <view class="sl-ko">{{item.ko}}</view>
+        <view class="sl-roman" wx:if="{{showRoman && item.romanization}}"><text class="sl-label">读音</text>{{item.romanization}}</view>
+        <view class="sl-zh" wx:if="{{item.translation}}"><text class="sl-label">意思</text>{{item.translation}}</view>
+        <view class="sl-grammar" wx:if="{{item.grammar}}"><text class="sl-g-tag">语法</text>{{item.grammar}}</view>
+        <view class="sl-missing" wx:if="{{!item.romanization || !item.translation || !item.grammar}}">这句学习卡信息不完整，可重新分析补全</view>
+      </view>
+
+      <view class="sl-vocab" wx:if="{{item.vocab.length}}">
+        <text class="sl-vocab-title">重点词</text>
+        <view class="v-chip" wx:for="{{item.vocab}}" wx:for-item="v" wx:key="ko" data-i="{{index}}" data-v="{{index}}" catchtap="onAddVocab">
+          <text class="v-ko">{{v.ko}}</text>
+          <text class="v-zh">{{v.zh}}</text>
+          <text class="v-plus">+</text>
+        </view>
+      </view>
+
+      <view class="sl-foot">
+        <view
+          class="rec-btn {{lineScores[index] && lineScores[index].evaluating ? 'rec-eval' : ''}} {{recording && recordIdx === index ? 'rec-on' : ''}}"
+          data-i="{{index}}" catchtap="onLineRecord">
+          <text wx:if="{{lineScores[index] && lineScores[index].evaluating}}">评分中…</text>
+          <text wx:elif="{{recording && recordIdx === index}}">结束 {{recordTime}}s</text>
+          <text wx:else>🎙 跟读</text>
+        </view>
+
+        <view class="sl-score" wx:if="{{lineScores[index] && lineScores[index].score != null}}">
+          <text class="ss-num {{lineScores[index].score >= 80 ? 'ss-good' : ''}}">{{lineScores[index].score}}</text>
+          <text class="ss-cap">分 · {{lineScores[index].source === 'fallback' ? '估算' : 'AI 评测'}}</text>
+        </view>
+        <view class="sl-score-err" wx:elif="{{lineScores[index] && lineScores[index].error}}">评分失败</view>
+      </view>
+
+      <view class="sl-advice" wx:if="{{lineScores[index] && lineScores[index].score != null}}">
+        <text class="sl-a-t">教练点评：</text>{{lineScores[index].advice}}
+        <view class="sl-a-asr" wx:if="{{lineScores[index].asr_text}}">识别到：{{lineScores[index].asr_text}}</view>
+      </view>
+    </view>
+  </block>
+
+  <view style="height: calc(env(safe-area-inset-bottom) + 48rpx);"></view>
+</view>

@@ -6,8 +6,7 @@ const app = getApp();
 
 const MODES = [
   { label: '聊天', text: '聊天' },
-  { label: '情景·餐厅', text: '情景：餐厅点餐' },
-  { label: '情景·机场', text: '情景：机场入关' },
+  { label: '情景对练', text: '', key: 'scenario' },
   { label: '练发音', text: '练发音' },
   { label: '测水平', text: '测水平' }
 ];
@@ -27,6 +26,19 @@ const FALLBACK_CHARACTERS = [
   { id: 'gwajang', name: '김 선생 金老师', avatar: '📚', tagline: 'TOPIK 考官' }
 ];
 
+const CODE_LABEL = { G: '语法', P: '发音', V: '词汇', H: '敬语' };
+
+// 情景库本地兜底（后端不可达时仍可用；优先使用 /api/scenarios 完整数据）
+const FALLBACK_SCENARIOS = [
+  { id: 'airport', icon: '✈️', name: '机场入关', name_ko: '공항 입국심사', category: '旅行', level: '入门' },
+  { id: 'restaurant', icon: '🍜', name: '餐厅点餐', name_ko: '식당에서 주문하기', category: '旅行', level: '入门' },
+  { id: 'subway', icon: '🚇', name: '地铁出行', name_ko: '지하철 이용', category: '旅行', level: '日常' },
+  { id: 'askway', icon: '🗺️', name: '街头问路', name_ko: '길 묻기', category: '旅行', level: '日常' },
+  { id: 'intro', icon: '👋', name: '初次自我介绍', name_ko: '자기소개', category: '日常生活', level: '入门' },
+  { id: 'friend_plan', icon: '🎬', name: '约朋友看电影', name_ko: '친구와 약속', category: '日常生活', level: '日常' },
+  { id: 'interview', icon: '💼', name: '求职面试', name_ko: '면접', category: '学习/工作', level: '进阶' }
+];
+
 // 交互层原则：点击一律 bindtap；只有按住说话用 touch 事件
 
 Page({
@@ -36,6 +48,15 @@ Page({
     currentMode: '聊天',
     characters: FALLBACK_CHARACTERS,
     character: FALLBACK_CHARACTERS[0],
+    scenarios: FALLBACK_SCENARIOS,
+    scenarioGroups: [],
+    scenarioSheet: false,
+    currentScenario: null,
+    scenarioEnding: false,
+    // Demo 模式（Phase 12）
+    demoMode: false,
+    demoFinished: false,
+    demoBusy: false,
     status: 'listening', // listening | typing
     messages: [],
     inputText: '',
@@ -52,11 +73,31 @@ Page({
     this.recorder = wx.getRecorderManager();
     this._bindRecorder();
     this.loadNotice();
+    this._groupScenarios(FALLBACK_SCENARIOS);
+    this.loadScenarios();
 
     const saved = wx.getStorageSync('kfp_character');
     if (saved && saved.id) this.setData({ character: saved });
 
     this.loadCharacters();
+
+    // 演示模式：重置剧本档案，进入干净起点
+    const demoMode = wx.getStorageSync('kfp_demo_mode') === '1';
+    if (demoMode) {
+      this.setData({ demoMode: true });
+      api.post('/api/demo/reset', { userId: app.globalData.userId }).then(() => {
+        this.pushAssistant(
+          '🎬 演示模式已开启\n\n这是一段【预置剧本】的完整学习闭环演示：测试 → 定级 → 纠错 → 错误记忆 → 掌握 → 情景复盘。\n数据与你的真实学习档案完全隔离。\n\n点击下方「下一步」开始。',
+          null,
+          true
+        );
+      }).catch(() => {
+        this.setData({ demoMode: false });
+        wx.showToast({ title: '演示模式启动失败', icon: 'none' });
+      });
+      return;
+    }
+
     this.pushAssistant(
       '안녕하세요! 만나서 반가워요~ 😊\n你好！我是你的韩语伙伴。\n告诉我：① 你的韩语水平？② 为什么学韩语（追星/留学/工作/兴趣）？也可以点上方话题直接开聊！',
       null,
@@ -77,6 +118,24 @@ Page({
       if (caps) app.globalData.serverCaps = caps;
     }).catch(() => {});
     this._bindRecorder();
+    // 演示模式入口：从首页切换而来且 chat 实例已存在时，onLoad 不会重新触发，在此接管
+    if (wx.getStorageSync('kfp_demo_enter') === '1') {
+      wx.removeStorageSync('kfp_demo_enter');
+      if (wx.getStorageSync('kfp_demo_mode') === '1' && !this.data.demoMode) {
+        this.setData({ demoMode: true });
+        api.post('/api/demo/reset', { userId: app.globalData.userId }).then(() => {
+          this.pushAssistant(
+            '🎬 演示模式已开启\n\n这是一段【预置剧本】的完整学习闭环演示：测试 → 定级 → 纠错 → 错误记忆 → 掌握 → 情景复盘。\n数据与你的真实学习档案完全隔离。\n\n点击下方「下一步」开始。',
+            null,
+            true
+          );
+        }).catch(() => {
+          this.setData({ demoMode: false });
+          wx.showToast({ title: '演示模式启动失败', icon: 'none' });
+        });
+        return;
+      }
+    }
     // 名句页「💬 问 AI」联动：读取一次性预填提问并自动发送
     const prefill = wx.getStorageSync('kfp_chat_prefill');
     if (prefill) {
@@ -101,10 +160,31 @@ Page({
   },
 
   _bindRecorder() {
-    this.recorder.onStop((res) => this.onRecordStop(res));
+    if (!this.recorder) return;
+    app.globalData.recorderOwner = this;
+    if (this._recorderBound) return;
+    this._recorderStopHandler = this._recorderStopHandler || ((res) => {
+      if (app.globalData.recorderOwner === this) this.onRecordStop(res);
+    });
+    this.recorder.onStop(this._recorderStopHandler);
+    this._recorderBound = true;
+  },
+
+  _unbindRecorder() {
+    if (app.globalData.recorderOwner === this) app.globalData.recorderOwner = null;
+    if (!this.recorder || !this._recorderBound) return;
+    if (typeof this.recorder.offStop === 'function') {
+      this.recorder.offStop(this._recorderStopHandler);
+      this._recorderBound = false;
+    }
+  },
+
+  onHide() {
+    this._unbindRecorder();
   },
 
   onUnload() {
+    this._unbindRecorder();
     this._clearRecTimer();
     if (this._twTimer) clearInterval(this._twTimer);
   },
@@ -138,6 +218,118 @@ Page({
     }).catch(() => {});
   },
 
+  /* ---------------- 情景对练（Phase 8） ---------------- */
+  loadScenarios() {
+    api.get('/api/scenarios').then((res) => {
+      if (res && res.scenarios && res.scenarios.length) {
+        this.setData({ scenarios: res.scenarios });
+        this._groupScenarios(res.scenarios);
+      }
+    }).catch(() => {});
+  },
+
+  _groupScenarios(list) {
+    const cats = ['旅行', '日常生活', '学习/工作'];
+    this.setData({
+      scenarioGroups: cats
+        .map((cat) => ({ cat, items: list.filter((s) => s.category === cat) }))
+        .filter((g) => g.items.length)
+    });
+  },
+
+  openScenarioSheet() {
+    this.setData({ scenarioSheet: true });
+  },
+
+  onSheetClose() {
+    this.setData({ scenarioSheet: false });
+  },
+
+  onScenarioTap(e) {
+    const id = e.currentTarget.dataset.id;
+    const s = this.data.scenarios.find((x) => x.id === id);
+    if (!s) return;
+    this.setData({ scenarioSheet: false, currentScenario: s, currentMode: '情景对练' });
+    this.sendText('开始情景对练：「' + s.name + '」', 'text', { scenarioId: id });
+  },
+
+  /* 结束情景并生成复盘评分卡 */
+  onScenarioEnd() {
+    if (this.data.scenarioEnding) return;
+    if (this.data.status === 'typing') {
+      wx.showToast({ title: '等老师说完再复盘哦', icon: 'none' });
+      return;
+    }
+    this.setData({ scenarioEnding: true });
+    api.post('/api/scenario/end', { userId: app.globalData.userId }).then((res) => {
+      this.setData({ scenarioEnding: false });
+      if (res && res.ok && res.report) {
+        this.pushMessage('sys', '', { report: res.report });
+        this.setData({ currentScenario: null, currentMode: '聊天' });
+        wx.vibrateShort && wx.vibrateShort({ type: 'light' });
+      } else {
+        wx.showToast({ title: (res && res.error) || '复盘失败，请重试', icon: 'none' });
+      }
+    }).catch(() => {
+      this.setData({ scenarioEnding: false });
+      wx.showToast({ title: '复盘失败，请检查网络', icon: 'none' });
+    });
+  },
+
+  /* ---------------- Demo 模式（Phase 12） ---------------- */
+  pushDemoStep(res) {
+    if (res.user_line) this.pushMessage('user', res.user_line);
+    this.pushMessage('assistant', res.display || '', {
+      speech: res.speech || '',
+      errors: (res.errors || []).map((e) => ({ ...e, typeLabel: CODE_LABEL[e.code] || '提示' })),
+      mastered: res.mastered || []
+    });
+    if (res.report) this.pushMessage('sys', '', { report: res.report });
+  },
+
+  onDemoNext() {
+    if (this.data.demoBusy || this.data.demoFinished) return;
+    this.setData({ demoBusy: true });
+    api.post('/api/demo/next', { userId: app.globalData.userId }).then((res) => {
+      this.setData({ demoBusy: false });
+      if (res && res.ok) {
+        this.pushDemoStep(res);
+        if (res.finished) this.setData({ demoFinished: true });
+      } else {
+        wx.showToast({ title: (res && res.error) || '演示加载失败', icon: 'none' });
+      }
+    }).catch(() => {
+      this.setData({ demoBusy: false });
+      wx.showToast({ title: '演示加载失败，请检查后端', icon: 'none' });
+    });
+  },
+
+  onDemoRestart() {
+    api.post('/api/demo/reset', { userId: app.globalData.userId }).then(() => {
+      this.msgSeq = 0;
+      this.setData({ messages: [], demoFinished: false, scrollInto: '' });
+      this.pushAssistant(
+        '🎬 演示已重置，点击「下一步」重新开始。',
+        null,
+        true
+      );
+    }).catch(() => wx.showToast({ title: '重置失败，请重试', icon: 'none' }));
+  },
+
+  onDemoExit() {
+    wx.showModal({
+      title: '退出演示模式',
+      content: '退出后回到真实 AI 对话（演示数据会保留在隔离档案中）。',
+      confirmColor: '#0C54E0',
+      success: (r) => {
+        if (!r.confirm) return;
+        wx.removeStorageSync('kfp_demo_mode');
+        wx.removeStorageSync('kfp_demo_enter');
+        wx.reLaunch({ url: '/pages/chat/chat' });
+      }
+    });
+  },
+
   onAvatarTap() {
     const list = this.data.characters;
     wx.showActionSheet({
@@ -161,7 +353,7 @@ Page({
         if (!res.confirm) return;
         api.post('/api/session/new', { userId: app.globalData.userId }).then(() => {
           this.msgSeq = 0;
-          this.setData({ messages: [], scrollInto: '' });
+          this.setData({ messages: [], scrollInto: '', currentScenario: null, currentMode: '聊天' });
           this.pushAssistant(
             '새 대화 시작! 🎉\n新对话开始啦～今天想练点什么？\n可以点上方话题，也可以直接打字或按住说话！',
             null,
@@ -173,7 +365,7 @@ Page({
   },
 
   loadHistory() {
-    api.get('/api/profile/' + app.globalData.userId).then((res) => {
+    api.whenReady().then(() => api.get('/api/profile/' + app.globalData.userId)).then((res) => {
       if (res && res.messages && res.messages.length) {
         const loaded = res.messages.slice(-20).filter((m) => m.content && m.content !== '…').map((m) => {
           const text = m.content;
@@ -193,6 +385,9 @@ Page({
     const msg = { id, role, text, ...extra };
     if (role === 'assistant' && !extra.pending && !extra.streaming) {
       msg.blocks = mdparse.parse(text);
+    }
+    if (role === 'sys' && extra.report) {
+      msg.report = extra.report;
     }
     const messages = this.data.messages.concat([msg]);
     this.setData({ messages, scrollInto: 'msg-' + (messages.length - 1) });
@@ -225,13 +420,15 @@ Page({
 
   onSend() {
     const text = (this.data.inputText || '').trim();
-    if (!text || this.data.status === 'typing') return;
+    if (!text || this.data.status === 'typing' || this.data.recording) return;
     this.setData({ inputText: '' });
     this.sendText(text, 'text');
   },
 
-  sendText(text, channel) {
-    this.pushMessage('user', text);
+  sendText(text, channel, opts) {
+    const cleanText = String(text || '').trim();
+    if (!cleanText || this.data.status === 'typing' || this.data.recording) return false;
+    this.pushMessage('user', cleanText);
     const pendingId = this.pushMessage('assistant', '', { pending: true });
     this.setData({ status: 'typing', scrollInto: 'msg-' + (this.data.messages.length - 1) });
     this._twStarted = false;
@@ -240,15 +437,17 @@ Page({
     streamUtil.streamChat({
       data: {
         userId: app.globalData.userId,
-        text,
+        text: cleanText,
         channel,
         mode: this.data.currentMode,
-        characterId: this.data.character.id
+        characterId: this.data.character.id,
+        scenarioId: (opts && opts.scenarioId) || undefined
       },
       onDelta: (d) => this._twAppend(d),
       onDone: (final) => this._twDone(pendingId, final),
       onError: (e) => this._twFail(pendingId, e)
     });
+    return true;
   },
 
   /* ---- 打字机引擎：增量入缓冲，定时逐字上屏 ----
@@ -333,6 +532,10 @@ Page({
           blocks: mdparse.parse(display),
           speech: final.speech || '',
           korean: final.korean_sentences || [],
+          // 结构化纠错卡：后端 state_patch.errors 规范化结果
+          errors: (final.errors || []).map((e) => ({ ...e, typeLabel: CODE_LABEL[e.code] || '提示' })),
+          // 掌握祝贺卡：后端 errors_mastered 闭环结果
+          mastered: final.mastered || [],
           pending: false,
           streaming: false
         },
@@ -368,6 +571,10 @@ Page({
   /* ---------------- 模式 / 话题 ---------------- */
   onModeTap(e) {
     const mode = e.currentTarget.dataset.mode;
+    if (mode.key === 'scenario') {
+      this.openScenarioSheet();
+      return;
+    }
     this.setData({ currentMode: mode.label });
     this.sendText(mode.text, 'text');
   },
@@ -395,7 +602,7 @@ Page({
   /* ---------------- 气泡操作 ---------------- */
   onSpeakTap(e) {
     const speech = e.currentTarget.dataset.speech;
-    if (!speech) return;
+    if (!speech || !this.data.ttsEnabled) return;
     voice.speak(speech).then((ok) => this._ttsTip(ok));
   },
 
@@ -436,8 +643,6 @@ Page({
         encodeBitRate: 96000,
         duration: 30000
       });
-    } else if (this.wxsiManager) {
-      this.wxsiManager.start({ lang: 'zh_CN', duration: 30000 });
     } else {
       this.setData({ recording: false });
       this._clearRecTimer();
@@ -448,7 +653,6 @@ Page({
   onVoiceEnd() {
     if (!this.data.recording) return;
     if (app.globalData.serverCaps.asr) this.recorder.stop();
-    else if (this.wxsiManager) this.wxsiManager.stop();
     this._clearRecTimer();
   },
 
@@ -463,9 +667,12 @@ Page({
   },
 
   onRecordStop(res) {
-    this.setData({ recording: false });
+    this.setData({ recording: false, status: 'typing' });
     this._clearRecTimer();
-    if (!res || !res.tempFilePath || (res.duration || 0) < 800) return;
+    if (!res || !res.tempFilePath || (res.duration || 0) < 800) {
+      this.setData({ status: 'listening' });
+      return;
+    }
     this.pushMessage('user', '🎤 [语音]');
     const pendingId = this.pushMessage('assistant', '', { pending: true });
     api
@@ -474,13 +681,15 @@ Page({
         const text = (data && data.text || '').trim();
         if (!text) {
           this.replaceMessage(pendingId, '没听清，再说一次好吗？(다시 말씀해 주세요!)');
+          this.setData({ status: 'listening' });
           return;
         }
         this.removeMessage(pendingId);
-        this.sendText(text, 'voice');
+        this.setData({ status: 'listening' }, () => this.sendText(text, 'voice'));
       })
       .catch(() => {
         this.replaceMessage(pendingId, '😵 语音识别失败，请确认后端已配置 ASR。');
+        this.setData({ status: 'listening' });
       });
   },
 
@@ -502,6 +711,7 @@ Page({
 
   /* ---------------- 文件上传 ---------------- */
   onUploadTap() {
+    if (this.data.status === 'typing' || this.data.recording) return;
     wx.showActionSheet({
       itemList: ['📸 拍照/相册（教材、菜单、路牌）', '📄 选择文档（txt/srt/md）'],
       success: (res) => {
@@ -530,15 +740,19 @@ Page({
   },
 
   doUpload(filePath, kind) {
+    if (!filePath || this.data.status === 'typing' || this.data.recording) return;
     this.pushMessage('user', kind === 'image' ? '📎 [图片]' : '📎 [文档]');
     const pendingId = this.pushMessage('assistant', '', { pending: true });
+    this.setData({ status: 'typing' });
     api
       .uploadFile('/api/upload', filePath, { userId: app.globalData.userId })
       .then((res) => {
         this.replaceMessage(pendingId, res.display || '(未识别到内容)', res.speech);
+        this.setData({ status: 'listening' });
       })
       .catch(() => {
         this.replaceMessage(pendingId, '😵 文件处理失败，请重试。');
+        this.setData({ status: 'listening' });
       });
   }
 });

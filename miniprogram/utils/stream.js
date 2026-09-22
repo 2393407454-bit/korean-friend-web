@@ -17,6 +17,14 @@ function decodeChunk(buf) {
 function streamChat({ data, onDelta, onDone, onError }) {
   let buf = '';
   let finished = false;
+  let usingFallback = false;
+  let errorNotified = false;
+
+  const notifyError = (message) => {
+    if (finished || errorNotified) return;
+    errorNotified = true;
+    onError && onError(new Error(message));
+  };
 
   const handleFrame = (line) => {
     if (!line.startsWith('data: ')) return;
@@ -30,12 +38,47 @@ function streamChat({ data, onDelta, onDone, onError }) {
       finished = true;
       onDone && onDone(obj);
     } else if (obj.error) {
+      notifyError(obj.error);
       finished = true;
-      onError && onError(new Error(obj.error));
     } else if (obj.t) {
       onDelta && onDelta(obj.t);
     }
   };
+
+  const fallback = () => {
+    usingFallback = true;
+    return wx.request({
+      url: config.BASE_URL + '/api/chat',
+      method: 'POST',
+      data,
+      timeout: 120000,
+      success: (res) => {
+        if (res.statusCode >= 400) return notifyError('后端返回错误（' + res.statusCode + '）');
+        const d = res.data || {};
+        finished = true;
+        onDelta && onDelta(d.display || d.speech || '');
+        onDone && onDone({
+          done: true,
+          display: d.display || '',
+          speech: d.speech || '',
+          errors: d.errors || [],
+          mastered: d.mastered || [],
+          korean_sentences: d.korean_sentences || [],
+          profile: d.profile
+        });
+      },
+      fail: () => notifyError('连不上后端（' + config.BASE_URL + '）')
+    });
+  };
+
+  // 先判断能力，再决定请求类型，避免不支持分块时同时发起两次 AI 请求。
+  let canChunk = false;
+  try {
+    canChunk = typeof wx.canIUse === 'function' && wx.canIUse('request.onChunkReceived');
+  } catch (e) {
+    canChunk = false;
+  }
+  if (!canChunk) return fallback();
 
   const task = wx.request({
     url: config.BASE_URL + '/api/chat/stream',
@@ -43,40 +86,31 @@ function streamChat({ data, onDelta, onDone, onError }) {
     data,
     enableChunked: true,
     timeout: 180000,
-    success: () => {
-      if (!finished) onError && onError(new Error('连接中断'));
+    success: (res) => {
+      if (res.statusCode >= 400) return notifyError('后端返回错误（' + res.statusCode + '）');
+      if (!finished && !usingFallback) notifyError('连接中断');
     },
-    fail: (e) => {
-      if (!finished) onError && onError(new Error('连不上后端（' + config.BASE_URL + '）'));
+    fail: () => {
+      if (!finished && !usingFallback) notifyError('连不上后端（' + config.BASE_URL + '）');
     }
   });
 
-  if (task && task.onChunkReceived) {
-    task.onChunkReceived((res) => {
-      buf += decodeChunk(res.data);
-      let idx;
-      while ((idx = buf.indexOf('\n\n')) >= 0) {
-        const raw = buf.slice(0, idx);
-        buf = buf.slice(idx + 2);
-        raw.split('\n').forEach(handleFrame);
-      }
-    });
-  } else {
-    // 基础库不支持分块时降级：普通请求走非流式接口
-    wx.request({
-      url: config.BASE_URL + '/api/chat',
-      method: 'POST',
-      data,
-      timeout: 120000,
-      success: (res) => {
-        const d = res.data || {};
-        finished = true;
-        onDelta && onDelta(d.display || d.speech || '');
-        onDone && onDone({ done: true, speech: d.speech || '', korean_sentences: [], profile: d.profile });
-      },
-      fail: () => onError && onError(new Error('连不上后端'))
-    });
+  if (!task || typeof task.onChunkReceived !== 'function') {
+    // 极少数基础库声明支持但实例没有回调能力：终止这次请求后再单独降级。
+    usingFallback = true;
+    if (task && typeof task.abort === 'function') task.abort();
+    return fallback();
   }
+
+  task.onChunkReceived((res) => {
+    buf += decodeChunk(res.data);
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const raw = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      raw.split('\n').forEach(handleFrame);
+    }
+  });
 
   return task;
 }

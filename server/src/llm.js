@@ -116,7 +116,7 @@ async function createWithRetry(body, maxTokens) {
   throw lastErr || new Error('LLM 调用失败');
 }
 
-async function chatText(messages, temperature) {
+async function chatText(messages, temperature, maxTokens) {
   if (!LLM.apiKey) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
     const content = lastUser && typeof lastUser.content === 'string' ? lastUser.content : '';
@@ -129,7 +129,34 @@ async function chatText(messages, temperature) {
   };
   // GLM-4.5 系列默认开启思考模式，对话场景关闭以保证响应速度
   if (LLM.model.includes('4.5')) body.thinking = { type: 'disabled' };
-  return createWithRetry(body, 1000);
+  return createWithRetry(body, maxTokens || 1000);
+}
+
+// 当视觉模型只返回韩文原句时，用轻量文本模型补齐零基础学习字段。
+// 这是异常兜底路径，正常情况下图片只走一次 VLM，不影响主要分析速度。
+async function enrichSongLines(lines) {
+  if (!LLM.apiKey || !Array.isArray(lines) || !lines.length) return null;
+  const input = lines.slice(0, 16).map((line, index) => ({
+    index,
+    ko: String((line && line.ko) || '').trim().slice(0, 80)
+  })).filter((line) => line.ko);
+  if (!input.length) return null;
+  const prompt =
+    '你是给韩语零基础追星用户做歌词卡的老师。请把下面每句韩语补齐学习信息，只输出 JSON 数组，不要 Markdown。' +
+    '每一项必须包含 index、ko、romanization、translation、grammar、vocab；禁止只返回 ko。' +
+    'romanization 用小写英文并按音节用 - 分隔；translation 用自然简短中文；grammar 用中文解释一个最值得学的语法点，30 字以内；vocab 给 2~3 个核心单词，每个含 ko 和 zh。' +
+    '即使句子很短，也要填写全部字段；ko 必须原样保留。\n' + JSON.stringify(input);
+  try {
+    const out = await chatText([{ role: 'user', content: prompt }], 0.2, 1800);
+    const start = String(out || '').indexOf('[');
+    const end = String(out || '').lastIndexOf(']');
+    if (start < 0 || end <= start) return null;
+    const parsed = JSON.parse(String(out).slice(start, end + 1));
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (e) {
+    console.warn('[song] 学习字段补全失败：', e.message);
+    return null;
+  }
 }
 
 async function chatJSON(messages) {
@@ -205,10 +232,27 @@ async function chatStream(messages, { temperature, maxTokens, onDelta } = {}) {
   throw lastErr || new Error('LLM 流式调用失败');
 }
 
-async function visionCall(content) {
+async function visionCall(content, maxTokens) {
   const body = { model: VISION_MODEL, messages: [{ role: 'user', content }] };
   if (VISION_MODEL.includes('4.5')) body.thinking = { type: 'disabled' };
-  return createWithRetry(body, 700);
+  return createWithRetry(body, maxTokens || 700);
+}
+
+// 视觉：一次调用直接返回 K-pop 学歌所需的结构化 JSON，避免「先 OCR、再 LLM」两次排队。
+async function analyzeSongImage(base64, maxLines) {
+  if (!LLM.apiKey) return '';
+  const lineLimit = maxLines || 24;
+  return visionCall([
+    {
+      type: 'text',
+      text:
+        '你是韩语歌词学习教练。请严格只读取图片中清晰可见的文字，并只输出一个 JSON 对象，不要 Markdown 或其他说明。' +
+        'JSON 格式：{"summary":"只概括图片中可见内容","candidates":[{"title":"图片中出现的歌名","artist":"图片中出现的歌手","confidence":1}],"lines":[{"ko":"图片中可见的韩语原句","romanization":"小写连字符罗马音","translation":"中文翻译","grammar":"一句话语法点","vocab":[{"ko":"图片中句子里的单词","zh":"释义"}]}]}。' +
+        '规则：只分析图片中实际出现的内容，不要根据歌名、歌手、零散歌词或常识猜测歌曲，也不要补写图片外的歌词；图片没有出现歌名/歌手时 candidates 必须为空数组；不要把图片外的副歌或下一句加入 lines；按图片从上到下输出最多 ' + lineLimit + ' 句。' +
+        '每句必须填写 romanization、translation、grammar、vocab；vocab 只能选自该句，语法只解释该句；summary 只总结图片中实际出现的内容；看不清的字不要猜，直接跳过该句。'
+    },
+    { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + base64 } }
+  ], 1200);
 }
 
 // 视觉：口型/表情分析（视频通道）
@@ -289,7 +333,9 @@ try { edgeTtsLib = require('msedge-tts'); } catch (e) { /* 未安装则跳过该
 const EDGE_VOICE_KO = process.env.EDGE_TTS_VOICE_KO || process.env.EDGE_TTS_VOICE || 'ko-KR-SunHiNeural'; // 韩语女声
 const EDGE_VOICE_ZH = process.env.EDGE_TTS_VOICE_ZH || 'zh-CN-XiaoxiaoNeural';                            // 中文女声（晓晓）
 const EDGE_RATE = process.env.EDGE_TTS_RATE || '-10%';                // 学习者友好：稍慢
-const edgeClients = {}; // voice -> MsEdgeTTS 实例（每种音色一条长连接）
+const edgeClients = {}; // voice -> { client, lastUsed }（复用长连接降低延迟，闲置自动重建）
+const EDGE_IDLE_MS = 30 * 1000;    // 空闲超过该时长直接重建：切网/热点 NAT 会掐掉闲置的 WebSocket
+const EDGE_TIMEOUT_MS = 20 * 1000; // 单段合成超时，防止半开连接把请求拖死
 
 // 按文字语言切分：韩文段 / 中文段（拉丁字母、数字、标点跟随所在段）
 function splitByLang(text) {
@@ -316,27 +362,44 @@ function splitByLang(text) {
   return segs.filter((s) => /[\uac00-\ud7a3\u4e00-\u9fff]/.test(s.text));
 }
 
+async function newEdgeClient(voice) {
+  const c = new edgeTtsLib.MsEdgeTTS();
+  const p = c.setMetadata(voice, edgeTtsLib.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  p.catch(() => {}); // 超时分支胜出后，迟到的 rejection 不能变成 unhandledRejection
+  await Promise.race([
+    p,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('连接超时')), EDGE_TIMEOUT_MS))
+  ]);
+  return c;
+}
+
 async function edgeTtsSeg(text, voice) {
-  try {
-    let c = edgeClients[voice];
-    if (!c) {
-      c = new edgeTtsLib.MsEdgeTTS();
-      await c.setMetadata(voice, edgeTtsLib.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-      edgeClients[voice] = c;
+  let lastErr = null;
+  // 失败自动重试一次：第一次多半死在已被网络掐掉的旧长连接上，重建后即可恢复
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      let entry = edgeClients[voice];
+      if (!entry || Date.now() - entry.lastUsed > EDGE_IDLE_MS) {
+        entry = { client: await newEdgeClient(voice), lastUsed: Date.now() };
+        edgeClients[voice] = entry;
+      }
+      entry.lastUsed = Date.now();
+      const { audioStream } = entry.client.toStream(text, { rate: EDGE_RATE });
+      const chunks = [];
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('合成超时')), EDGE_TIMEOUT_MS);
+        audioStream.on('data', (chunk) => chunks.push(chunk));
+        audioStream.on('end', () => { clearTimeout(timer); resolve(); });
+        audioStream.on('error', (e) => { clearTimeout(timer); reject(e); });
+      });
+      return Buffer.concat(chunks);
+    } catch (e) {
+      lastErr = e;
+      delete edgeClients[voice]; // 连接已不可信，下一轮重建
     }
-    const { audioStream } = c.toStream(text, { rate: EDGE_RATE });
-    const chunks = [];
-    await new Promise((resolve, reject) => {
-      audioStream.on('data', (chunk) => chunks.push(chunk));
-      audioStream.on('end', resolve);
-      audioStream.on('error', reject);
-    });
-    return Buffer.concat(chunks);
-  } catch (e) {
-    console.warn('[tts] Edge-TTS 段合成失败（' + voice + '）：', e.message);
-    delete edgeClients[voice]; // 连接可能失效，下次重建
-    return null;
   }
+  console.warn('[tts] Edge-TTS 段合成失败（' + voice + '）：', lastErr && lastErr.message);
+  return null;
 }
 
 function ffmpegConcat(buffers) {
@@ -422,4 +485,4 @@ async function synthesize(text) {
   return null;
 }
 
-module.exports = { caps, chatText, chatJSON, chatStream, analyzeFrame, analyzeImage, transcribe, synthesize, extractJSON };
+module.exports = { caps, chatText, enrichSongLines, chatJSON, chatStream, analyzeFrame, analyzeImage, analyzeSongImage, transcribe, synthesize, extractJSON };

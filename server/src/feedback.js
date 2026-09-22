@@ -21,7 +21,9 @@ function save(file, data) {
 }
 
 function adminKey() {
-  return process.env.ADMIN_KEY || 'kfp-admin'; // 生产环境务必在 .env 改掉
+  const key = process.env.ADMIN_KEY || '';
+  if (!key && process.env.NODE_ENV === 'production') throw new Error('生产环境必须配置 ADMIN_KEY');
+  return key || 'kfp-admin';
 }
 
 function checkKey(key) {

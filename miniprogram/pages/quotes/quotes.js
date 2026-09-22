@@ -11,6 +11,13 @@ function loadFavs() {
   return wx.getStorageSync(FAV_KEY()) || {};
 }
 
+function normalizeQuote(quote) {
+  const colors = Array.isArray(quote && quote.color) && quote.color.length >= 2
+    ? quote.color.slice(0, 2)
+    : ['#EAF3FF', '#DCEAFF'];
+  return { ...(quote || {}), color: colors };
+}
+
 Page({
   data: {
     heroQuotes: [],
@@ -27,7 +34,7 @@ Page({
   },
 
   onLoad() {
-    this._all = data.QUOTES.slice();
+    this._all = data.QUOTES.map(normalizeQuote);
     const daily = data.dailyQuote();
     const hero = [daily].concat(
       this._all.filter((q) => q.id !== daily.id && q.drama !== '韩剧通用').slice(0, 4)
@@ -162,7 +169,7 @@ Page({
       .then((res) => {
         this.setData({ aiLoading: false });
         if (res && res.quotes && res.quotes.length) {
-          this._all = res.quotes.concat(this._all);
+          this._all = res.quotes.map(normalizeQuote).concat(this._all);
           this.setData({ filter: { theme: '全部', drama: '全部', level: '全部' }, favOnly: false });
           this._apply();
           wx.showToast({ title: '新台词已生成 ✨', icon: 'none' });

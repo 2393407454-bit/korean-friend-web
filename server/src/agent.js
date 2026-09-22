@@ -4,12 +4,30 @@ const path = require('path');
 const store = require('./store');
 const llm = require('./llm');
 const characters = require('./characters');
+const scenarios = require('./scenarios');
+const demo = require('./demo');
 const { buildSystemPrompt, buildStreamSystemPrompt } = require('./system-prompt');
 const security = require('./security');
 
 const SRS_DAYS = [1, 3, 7, 14]; // 间隔复习：1/3/7/14 天
 const LEVEL_RATIO = { TOPIK1: 0.3, TOPIK2: 0.3, TOPIK3: 0.6, TOPIK4: 0.6, TOPIK5: 0.9, TOPIK6: 0.9 };
 const GOALS = ['kpop', 'kdrama', 'study', 'work', 'travel', 'hobby'];
+
+// 情景解析（Phase 8）：scenarioId → 场景元数据写入 session，返回当前进行中的场景
+function resolveScenario(doc, scenarioId) {
+  if (scenarioId) {
+    const s = scenarios.get(scenarioId);
+    if (s) {
+      doc.session = doc.session || {};
+      doc.session.scenario = {
+        id: s.id, name: s.name, name_ko: s.name_ko, category: s.category, level: s.level,
+        ai_role: s.ai_role, user_task: s.user_task, goal: s.goal
+      };
+      doc.session.mode = '情景模拟';
+    }
+  }
+  return (doc.session && doc.session.scenario) || null;
+}
 
 function addDays(n) {
   return new Date(Date.now() + n * 86400000).toISOString();
@@ -20,10 +38,11 @@ function today() {
 }
 
 function applyStatePatch(doc, patch) {
-  if (!patch || typeof patch !== 'object') return;
+  if (!patch || typeof patch !== 'object') return { mastered: [] };
   doc.session = doc.session || {};
   const p = doc.profile;
   const pr = doc.progress;
+  const events = { mastered: [] };
 
   if (patch.level && /^TOPIK[1-6]$/.test(patch.level)) {
     p.level = patch.level;
@@ -65,6 +84,7 @@ function applyStatePatch(doc, patch) {
   }
 
   // 同类错误累计次数，触发「第 3 次开专项课」的教学规则
+  // Phase 5：错误结构化（point 知识点 / severity 严重度 / explain 中文解释）
   for (const e of patch.errors || []) {
     if (!e || !e.wrong) continue;
     const found = pr.error_log.find((x) => x.wrong === e.wrong);
@@ -72,25 +92,71 @@ function applyStatePatch(doc, patch) {
       found.count = (found.count || 1) + 1;
       found.last = today();
       if (e.right) found.right = e.right;
+      if (e.point) found.point = String(e.point).slice(0, 40);
+      if (e.severity) found.severity = e.severity;
+      if (e.explain) found.explain = String(e.explain).slice(0, 120);
     } else {
       pr.error_log.push({
         code: e.code || 'G',
         wrong: String(e.wrong),
         right: e.right || '',
         note: e.note || '',
+        point: e.point ? String(e.point).slice(0, 40) : '',
+        severity: e.severity || 'medium',
+        explain: e.explain ? String(e.explain).slice(0, 120) : '',
         count: 1,
+        first: today(),
         last: today()
       });
     }
   }
   if (pr.error_log.length > 200) pr.error_log = pr.error_log.slice(-200);
 
+  // 流畅度/自然度定性评估：进入画像证据池（≥3 轮后参与能力评分）
+  if (patch.quality && typeof patch.quality === 'object') {
+    const q = patch.quality;
+    const flu = typeof q.fluency === 'number' ? Math.max(0, Math.min(100, Math.round(q.fluency))) : null;
+    const nat = typeof q.naturalness === 'number' ? Math.max(0, Math.min(100, Math.round(q.naturalness))) : null;
+    if (flu != null || nat != null) {
+      (pr.quality_log || (pr.quality_log = [])).push({
+        fluency: flu,
+        naturalness: nat,
+        at: new Date().toISOString()
+      });
+      if (pr.quality_log.length > 60) pr.quality_log = pr.quality_log.slice(-60);
+    }
+  }
+
   for (const w of patch.weak_points || []) {
     if (w && !pr.weak_points.includes(w)) pr.weak_points.push(String(w));
   }
 
+  // —— 掌握闭环（Phase 6）：模型上报「本轮正确使用了此前易错知识点」——
+  // 命中 error_log 中同名/同句错误 → 标记 mastered；从 weak_points 移除；进入 mastered_grammar
+  if (Array.isArray(patch.errors_mastered)) {
+    for (const pt of patch.errors_mastered) {
+      if (!pt) continue;
+      const key = String(pt);
+      const hits = (pr.error_log || []).filter((el) => (el.point && el.point === key) || el.wrong === key);
+      if (hits.length) {
+        for (const el of hits) {
+          if (el.status !== 'mastered') {
+            el.status = 'mastered';
+            el.mastered_at = today();
+            events.mastered.push({ point: el.point || key, wrong: el.wrong, right: el.right || '' });
+          }
+        }
+      } else {
+        events.mastered.push({ point: key, wrong: '', right: '' });
+      }
+      pr.weak_points = (pr.weak_points || []).filter((w) => w !== key);
+      if (!pr.grammar_mastered.includes(key)) pr.grammar_mastered.push(key);
+    }
+  }
+
   if (patch.mode) doc.session.mode = patch.mode;
   if (patch.scenario) doc.session.scenario = patch.scenario;
+  return events;
 }
 
 // 内层 JSON 常因未转义引号无法 JSON.parse，用锚点正则容错抢救
@@ -151,11 +217,12 @@ function normalizeOut(out) {
   return out;
 }
 
-async function handleChat({ userId, text, channel, mode, frameBase64, characterId }) {
+async function handleChat({ userId, text, channel, mode, frameBase64, characterId, scenarioId }) {
   const doc = store.loadUser(userId);
   doc.session = doc.session || {};
   doc.session.channel = channel || 'text';
   if (mode) doc.session.mode = mode;
+  const scenario = resolveScenario(doc, scenarioId);
   const character = characters.personaPrompt(characterId);
 
   let visionNote = null;
@@ -178,14 +245,23 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
       ? '（用户开启了摄像头，请根据口型分析结果指导发音：先给一个具体的口型纠正建议，再带练一遍相关音。）'
       : '');
 
+  computeDifficulty(doc); // 自适应难度：写入 profile.difficulty 供提示词执行
+
   const messages = [
-    { role: 'system', content: buildSystemPrompt(doc, visionNote, character) },
+    { role: 'system', content: buildSystemPrompt(doc, visionNote, character, scenario) },
     ...doc.messages.slice(-8), // 控制上下文长度，保证响应速度
     { role: 'user', content: finalText }
   ];
 
   const out = normalizeOut(await llm.chatJSON(messages));
-  applyStatePatch(doc, out.state_patch || {});
+  const events = applyStatePatch(doc, out.state_patch || {});
+
+  // 学习统计采集（纯本地数据，供画像/报告/连胜使用）
+  touchStats(doc, {
+    turns: 1,
+    errors: ((out.state_patch || {}).errors || []).length,
+    newWords: ((out.state_patch || {}).vocab_add || []).length
+  });
 
   doc.messages.push({ role: 'user', content: finalText.slice(0, 600) });
   doc.messages.push({ role: 'assistant', content: (out.display || out.speech || '').slice(0, 600) });
@@ -196,8 +272,79 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
     speech: out.speech || '',
     display: out.display || out.speech || '',
     ui_hints: out.ui_hints || {},
+    errors: cardErrors(out.state_patch),
+    mastered: events.mastered,
     profile: doc.profile
   };
+}
+
+/* =========================================================
+   自适应难度引擎（Phase 7）
+   输入：TOPIK 等级（基础档）+ 近 7 日正确率（真实纠错/轮数）+ 连续卡壳检测
+   输出：difficulty 1-5，写入 profile 供提示词执行 §1.5 细则
+   依据全程可解释（difficulty_evidence），数据不足时维持基础档不瞎调。
+   ========================================================= */
+const DIFF_BY_LEVEL = { TOPIK1: 2, TOPIK2: 2, TOPIK3: 3, TOPIK4: 3, TOPIK5: 4, TOPIK6: 4 };
+
+function computeDifficulty(doc) {
+  const p = doc.profile || {};
+  const st = doc.stats || {};
+  let d = (p.level && DIFF_BY_LEVEL[p.level]) || 2;
+  const evidence = [];
+
+  // 近 7 天正确率：正确率 = 1 - 纠错数/对话轮数（仅轮数充足时参与调整）
+  let turns = 0, errors = 0;
+  const daily = st.daily || {};
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const rec = daily[day];
+    if (rec) {
+      turns += rec.turns || 0;
+      errors += rec.errors || 0;
+    }
+  }
+  if (turns >= 5) {
+    const rate = 1 - Math.min(1, errors / turns);
+    evidence.push('近 7 日正确率 ' + Math.round(rate * 100) + '%（' + turns + ' 轮 / ' + errors + ' 处纠错）');
+    if (rate >= 0.92) d += 1;
+    else if (rate < 0.75) d -= 1;
+  } else {
+    evidence.push('近 7 日活跃不足 5 轮，维持基础档');
+  }
+
+  // 连续卡壳：同一知识点在近 2 天至少出现 2 次且累计次数 ≥2 → 降一档。
+  const recentErrs = (doc.progress.error_log || []).slice(-8);
+  const twoDaysAgo = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+  const groups = {};
+  recentErrs.forEach((e) => {
+    const key = e.point || e.wrong || 'unknown';
+    (groups[key] || (groups[key] = [])).push(e);
+  });
+  const stuck = Object.values(groups).some((items) => items.length >= 2 && items.every((e) => e.last >= twoDaysAgo) && items.reduce((sum, e) => sum + (e.count || 1), 0) >= 2);
+  if (stuck) {
+    d -= 1;
+    evidence.push('近期反复卡在同一类错误，降档放慢');
+  }
+
+  const finalD = Math.max(1, Math.min(5, d));
+  if (p.difficulty !== finalD) {
+    p.difficulty = finalD;
+    p.difficulty_at = new Date().toISOString();
+  }
+  p.difficulty_evidence = evidence.slice(0, 3);
+  return finalD;
+}
+
+// 前端纠错卡数据：取 state_patch.errors 规范化为卡片字段（最多 3 条）
+function cardErrors(patch) {
+  return ((patch && patch.errors) || []).slice(0, 3).map((e) => ({
+    code: e.code || 'G',
+    wrong: e.wrong || '',
+    right: e.right || '',
+    point: e.point || '',
+    severity: e.severity || 'medium',
+    explain: e.explain || e.note || ''
+  }));
 }
 
 async function handleUpload({ userId, file, mode }) {
@@ -255,12 +402,18 @@ function mockScoreFallback(target, asrText, sim) {
   };
 }
 
-async function handlePronounce({ target, audioPath }) {
+async function handlePronounce({ target, audioPath, userId }) {
   let asrText = '';
+  let source = 'ai';
   try {
     asrText = (await llm.transcribe(audioPath) || '').trim();
   } catch (e) {
     console.warn('[pronounce] ASR 失败：', e.message);
+  }
+  if (!asrText) {
+    const err = new Error('语音识别失败，暂时无法给出可信发音评分，请重试');
+    err.status = 503;
+    throw err;
   }
 
   const ta = target.replace(/\s+/g, '');
@@ -291,8 +444,23 @@ async function handlePronounce({ target, audioPath }) {
   } catch (e) {
     console.warn('[pronounce] AI 评分失败：', e.message);
   }
-  if (!evalOut) evalOut = mockScoreFallback(target, asrText, sim);
-  return { ...evalOut, asr_text: asrText };
+  if (!evalOut) {
+    // 兜底：基于 ASR 字符相似度的启发式估算（仍是真实依据，标记为 fallback，前端展示依据不冒充 AI 评测）
+    evalOut = mockScoreFallback(target, asrText, sim);
+    source = 'fallback';
+  }
+
+  // 评分落库：真实跟读证据进入用户画像（发音维度唯一硬数据来源）
+  if (userId) {
+    try {
+      const doc = store.loadUser(userId);
+      recordPronEval(doc, target, evalOut.score, evalOut.advice, asrText, source);
+      store.saveUser(doc);
+    } catch (e) {
+      console.warn('[pronounce] 评分落库失败：', e.message);
+    }
+  }
+  return { ...evalOut, asr_text: asrText, source };
 }
 
 // —— 流式对话：逐增量回调，结束时返回 speech / state / 韩语句子 ——
@@ -320,21 +488,24 @@ function extractSpeech(display) {
   return plain.slice(0, 240);
 }
 
-async function handleChatStream({ userId, text, channel, mode, characterId, onDelta }) {
+async function handleChatStream({ userId, text, channel, mode, characterId, scenarioId, onDelta }) {
   const doc = store.loadUser(userId);
   doc.session = doc.session || {};
   doc.session.channel = channel || 'text';
   if (mode) doc.session.mode = mode;
+  const scenario = resolveScenario(doc, scenarioId);
   const character = characters.personaPrompt(characterId);
 
   if (text && !(await security.checkText(text))) {
     const msg = '😅 这条内容不太适合一起学习，我们聊点别的吧！다른 주제로 가요~';
     if (onDelta) onDelta(msg);
-    return { speech: '', display: msg, state: {}, korean_sentences: [] };
+    return { speech: '', display: msg, state: {}, korean_sentences: [], errors: [], mastered: [] };
   }
 
+  computeDifficulty(doc); // 自适应难度
+
   const messages = [
-    { role: 'system', content: buildStreamSystemPrompt(doc, null, character) },
+    { role: 'system', content: buildStreamSystemPrompt(doc, null, character, scenario) },
     ...doc.messages.slice(-8),
     { role: 'user', content: text }
   ];
@@ -361,6 +532,13 @@ async function handleChatStream({ userId, text, channel, mode, characterId, onDe
   applyStatePatch(doc, state);
   const koreanSentences = extractKoreanSentences(display);
 
+  // 学习统计采集
+  touchStats(doc, {
+    turns: 1,
+    errors: (state && state.errors || []).length,
+    newWords: (state && state.vocab_add || []).length
+  });
+
   doc.messages.push({ role: 'user', content: String(text).slice(0, 600) });
   doc.messages.push({ role: 'assistant', content: display.slice(0, 600) });
   if (doc.messages.length > 24) doc.messages = doc.messages.slice(-24);
@@ -370,12 +548,29 @@ async function handleChatStream({ userId, text, channel, mode, characterId, onDe
     speech: extractSpeech(display),
     display,
     state,
+    errors: cardErrors(state),
+    mastered: masteredEvents(doc, state),
     korean_sentences: koreanSentences,
     profile: doc.profile
   };
 }
 
-// —— 新会话：归档当前历史并清空 ——
+// 流式路径的掌握事件：applyStatePatch 已落库，这里读取并输出祝贺所需的精简信息。
+// （mastered 的判定在 applyStatePatch 中完成；为避免重复遍历，此处直接重算一次，数据量极小）
+function masteredEvents(doc, state) {
+  const pts = (state && state.errors_mastered) || [];
+  const out = [];
+  for (const pt of pts) {
+    if (!pt) continue;
+    const key = String(pt);
+    const hit = (doc.progress.error_log || []).find((el) => (el.point && el.point === key) || el.wrong === key);
+    if (hit) out.push({ point: hit.point || key, wrong: hit.wrong, right: hit.right || '' });
+    else out.push({ point: key, wrong: '', right: '' });
+  }
+  return out;
+}
+
+// —— 新会话：归档当前历史并清空（连同进行中的情景） ——
 function archiveSession(userId) {
   const doc = store.loadUser(userId);
   if ((doc.messages || []).length) {
@@ -384,6 +579,9 @@ function archiveSession(userId) {
     if (doc.archived_sessions.length > 5) doc.archived_sessions = doc.archived_sessions.slice(-5);
   }
   doc.messages = [];
+  doc.session = doc.session || {};
+  doc.session.mode = '';
+  doc.session.scenario = null;
   store.saveUser(doc);
   return { ok: true };
 }
@@ -424,15 +622,19 @@ async function handleLessons({ userId, refresh }) {
 
   const p = doc.profile || {};
   const pr = doc.progress || {};
-  const recentErrors = (pr.error_log || []).slice(-5).map((e) => e.wrong + '(→' + e.right + ')');
+  // 定向训练（Phase 6）：只取未掌握的错误，带知识点名，供模型生成专项练习句
+  const activeErrors = (pr.error_log || [])
+    .filter((e) => e.status !== 'mastered')
+    .slice(-5)
+    .map((e) => e.wrong + ' → ' + e.right + (e.point ? '（知识点：' + e.point + '）' : ''));
   const prompt =
     '你是韩语发音课程设计师。为一位中国学习者生成今天的 6 句跟读练习课程。\n' +
     '学生档案：' + JSON.stringify(p) + '\n' +
     '弱点专项：' + JSON.stringify(pr.weak_points || []) + '\n' +
-    '近期高频错误：' + JSON.stringify(recentErrors) + '\n' +
+    '近期高频错误（未掌握）：' + JSON.stringify(activeErrors) + '\n' +
     '要求：\n' +
     '1. 难度贴合学生等级；主题优先围绕其兴趣/目标，日常实用\n' +
-    '2. 至少 2 句针对弱点和高频错误的专项练习句\n' +
+    '2. 至少 2 句针对弱点和高频错误的专项练习句——专项句必须让错误知识点在句中出现，帮学生用对一次（定向训练）\n' +
     '3. 每句 8~20 个韩语字母，自然常用；tip 用中文 30 字内，具体到音节/口型/收音\n' +
     '4. level 取值：入门/日常/进阶\n' +
     '只输出 JSON 数组，不要其他文字：\n' +
@@ -466,6 +668,221 @@ async function handleLessons({ userId, refresh }) {
   doc.pron_lessons = { lessons, at: new Date().toISOString() };
   store.saveUser(doc);
   return { lessons, cached: false };
+}
+
+// —— 情景复盘（Phase 8）：基于会话历史由 LLM 生成结构化评分卡 ——
+async function handleScenarioEnd({ userId }) {
+  const doc = store.loadUser(userId);
+  const scene = doc.session && doc.session.scenario;
+  if (!scene) return { ok: false, error: '当前没有进行中的情景对练' };
+
+  const history = (doc.messages || [])
+    .slice(-16)
+    .map((m) => (m.role === 'user' ? '学生：' : '老师：') + String(m.content).slice(0, 260))
+    .join('\n');
+
+  const prompt =
+    '你是韩语情景对练的复盘评审员。请根据以下情景与对话记录，给出客观的结构化复盘。\n' +
+    '场景：' + scene.name + '（' + scene.category + '），AI 角色：' + scene.ai_role + '，用户任务：' + scene.user_task + '，目标：' + scene.goal + '\n\n' +
+    '对话记录（最近几轮）：\n' + (history || '（无记录）') + '\n\n' +
+    '评分标准：任务完成度 40% + 语言准确度 30% + 表达自然度 30%。\n' +
+    'highlights 写学生做得好的 2-3 点（具体，如「助词 에 用对了」）；improvements 写 2-3 条具体建议；summary 一句话总评（中文，40 字内）。\n' +
+    '只输出一个 JSON 对象，不要任何其他文字：\n' +
+    '{"score": 0到100的整数, "highlights": ["亮点1"], "improvements": ["改进1"], "summary": "一句话总评"}';
+
+  let report = null;
+  try {
+    const raw = await llm.chatText([{ role: 'user', content: prompt }], 0.5);
+    const parsed = llm.extractJSON(raw);
+    if (parsed && typeof parsed.score === 'number') {
+      report = {
+        scene: scene.id,
+        scene_name: scene.name,
+        score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+        highlights: (Array.isArray(parsed.highlights) ? parsed.highlights : []).slice(0, 3).map(String),
+        improvements: (Array.isArray(parsed.improvements) ? parsed.improvements : []).slice(0, 3).map(String),
+        summary: String(parsed.summary || '').slice(0, 80),
+        at: new Date().toISOString()
+      };
+    }
+  } catch (e) {
+    console.warn('[scenario] 复盘生成失败：', e.message);
+  }
+  if (!report) return { ok: false, error: 'AI 复盘生成失败，请重试（对话不受影响）' };
+
+  // 落库 + 结束场景
+  const reports = doc.progress.scenario_reports || (doc.progress.scenario_reports = []);
+  reports.push(report);
+  if (reports.length > 20) doc.progress.scenario_reports = reports.slice(-20);
+  doc.session.scenario = null;
+  doc.session.mode = '';
+  store.saveUser(doc);
+  return { ok: true, report };
+}
+
+// —— 结构化学习报告（Phase 10）：纯本地数据引擎为主，AI 评语为可选增强——
+// 设计原则：数据部分 100% 来自落库行为（周统计/纠错/趋势快照/跟读/情景），
+// AI 只负责「评语 + 下次重点」的定性生成；AI 不可用时报告依然完整可展示。
+async function handleReport({ userId }) {
+  const doc = store.loadUser(userId);
+  const pr = doc.progress || {};
+  const st = doc.stats || {};
+  const weekly = weekStats(st);
+
+  const errLog = pr.error_log || [];
+  const activeErrs = errLog.filter((e) => e.status !== 'mastered');
+  const masteredErrs = errLog.length - activeErrs.length;
+
+  const pronLog = pr.pron_eval_log || [];
+  const pronAvg = pronLog.length ? Math.round(pronLog.reduce((s, e) => s + (e.score || 0), 0) / pronLog.length) : null;
+
+  const scReports = pr.scenario_reports || [];
+  const vocab = pr.vocab || [];
+  const dueN = vocab.filter((v) => v.due_at && new Date(v.due_at).getTime() <= Date.now()).length;
+
+  // 能力趋势：score_history 首条 vs 最新一条（评分快照 ≥2 才有对比）
+  const hist = pr.score_history || [];
+  const trend = [];
+  if (hist.length >= 2) {
+    const first = hist[0];
+    const last = hist[hist.length - 1];
+    for (const d of ABILITY_DIMS) {
+      const a = first[d.key];
+      const b = last[d.key];
+      if (a != null && b != null) trend.push({ key: d.key, label: d.label, from: a, to: b, delta: b - a });
+    }
+  }
+
+  const report = {
+    at: new Date().toISOString(),
+    level: (doc.profile || {}).level || '',
+    streak: weekly.streak_days,
+    week: {
+      minutes_est: weekly.week_minutes_est,
+      turns: weekly.week_turns,
+      errors: weekly.week_errors,
+      words: weekly.week_words,
+      pron: weekly.week_pron
+    },
+    // 按错误出现频率排序（同频次按最近时间），取前 5 —— 保证「高频错误」名副其实
+    top_errors: activeErrs
+      .slice()
+      .sort((a, b) => (b.count || 1) - (a.count || 1) || String(b.last || '').localeCompare(String(a.last || '')))
+      .slice(0, 5)
+      .map((e) => ({
+        point: e.point || e.wrong,
+        wrong: e.wrong,
+        right: e.right || '',
+        count: e.count || 1
+      })),
+    mastered_errors: masteredErrs,
+    grammar_mastered: (pr.grammar_mastered || []).length,
+    vocab_total: vocab.length,
+    vocab_due: dueN,
+    pron_tries: pronLog.length,
+    pron_avg: pronAvg,
+    scenario_count: scReports.length,
+    scenario_last: scReports.length ? scReports[scReports.length - 1].score : null,
+    trend,
+    ai_comment: '',
+    next_focus: []
+  };
+
+  // AI 定性评语 + 下次重点（可选增强，失败不影响报告）
+  try {
+    const prompt =
+      '你是韩语学习教练。请根据以下真实学习数据，给出一段 60 字内的中文评语（先肯定再指出改进方向，不要泛泛而谈），' +
+      '并给出「下次重点」最多 3 个具体的知识点/训练方向。\n' +
+      '学习数据：' + JSON.stringify({
+        level: report.level,
+        week: report.week,
+        streak: report.streak,
+        top_errors: report.top_errors,
+        mastered_errors: report.mastered_errors,
+        trend: report.trend,
+        pron: { tries: report.pron_tries, avg: report.pron_avg },
+        scenario: { count: report.scenario_count, last_score: report.scenario_last }
+      }) + '\n' +
+      '只输出一个 JSON 对象，不要任何其他文字：{"comment": "评语", "focus": ["知识点1", "知识点2"]}';
+    const raw = await llm.chatText([{ role: 'user', content: prompt }], 0.6);
+    const parsed = llm.extractJSON(raw);
+    if (parsed) {
+      report.ai_comment = String(parsed.comment || '').slice(0, 120);
+      report.next_focus = (Array.isArray(parsed.focus) ? parsed.focus : []).slice(0, 3).map(String);
+    }
+  } catch (e) {
+    console.warn('[report] AI 评语生成失败（报告数据版不受影响）：', e.message);
+  }
+
+  return { report };
+}
+
+// —— Demo 模式（Phase 12）：预置剧本 + 真实状态管线 ——
+// 演示数据写入独立档案（demo_ 前缀），与真实用户完全隔离；
+// 每一步 state 都经过 applyStatePatch，纠错卡/掌握卡/复盘卡由真实系统逻辑渲染。
+function demoDocId(userId) {
+  return 'demo_' + String(userId).slice(0, 48);
+}
+
+function handleDemoNext({ userId }) {
+  const doc = store.loadUser(demoDocId(userId));
+  if (!doc.demo) doc.demo = { step: 0 };
+  doc.demo.at = new Date().toISOString();
+
+  const idx = doc.demo.step;
+  const step = demo.stepAt(idx);
+  if (!step) return { ok: false, error: '演示已结束' };
+
+  const state = step.reply.state || {};
+  applyStatePatch(doc, state);
+  touchStats(doc, { turns: 1, errors: (state.errors || []).length });
+  if (step.user) doc.messages.push({ role: 'user', content: step.user.slice(0, 600) });
+  doc.messages.push({ role: 'assistant', content: step.reply.display.slice(0, 600) });
+  if (doc.messages.length > 30) doc.messages = doc.messages.slice(-30);
+  doc.demo.step = idx + 1;
+  store.saveUser(doc);
+
+  return {
+    ok: true,
+    user_line: step.user || '',
+    display: step.reply.display,
+    speech: step.reply.speech || '',
+    errors: cardErrors(state),
+    mastered: masteredEvents(doc, state),
+    report: step.reply.report || null,
+    finished: !demo.stepAt(idx + 1),
+    total: demo.total(),
+    step: idx + 1
+  };
+}
+
+function handleDemoReset({ userId }) {
+  const doc = store.loadUser(demoDocId(userId));
+  doc.demo = { step: 0, at: new Date().toISOString() };
+  doc.messages = [];
+  doc.session = doc.session || {};
+  doc.session.mode = '';
+  doc.session.scenario = null;
+  // 清空演示进度数据，保证每次演示从同一初始状态开始
+  doc.profile.level = '';
+  doc.profile.goal = '';
+  doc.profile.interests = [];
+  doc.progress.vocab = [];
+  doc.progress.error_log = [];
+  doc.progress.weak_points = [];
+  doc.progress.grammar_mastered = [];
+  doc.progress.grammar_learning = [];
+  doc.progress.quality_log = [];
+  doc.progress.pron_eval_log = [];
+  doc.progress.pron_mastered = [];
+  doc.progress.scenario_reports = [];
+  doc.progress.scores = null;
+  doc.progress.score_history = [];
+  doc.stats.daily = {};
+  doc.stats.streak_days = 0;
+  doc.stats.last_active_date = '';
+  store.saveUser(doc);
+  return { ok: true };
 }
 
 // —— AI 生成韩剧风格台词卡：按剧名/主题/难度，罗马音断句 + 双语注解 ——
@@ -507,7 +924,8 @@ async function handleDramaQuotes({ userId, drama, theme, level, refresh }) {
         zh: String(q.zh || '').trim(),
         grammar: String(q.grammar || '').trim(),
         vocab: Array.isArray(q.vocab) ? q.vocab.slice(0, 4) : [],
-        similar: Array.isArray(q.similar) ? q.similar.slice(0, 3) : []
+        similar: Array.isArray(q.similar) ? q.similar.slice(0, 3) : [],
+        color: Array.isArray(q.color) && q.color.length >= 2 ? [String(q.color[0]), String(q.color[1])] : ['#EAF3FF', '#DCEAFF']
       })).filter((q) => q.ko && q.roman && q.zh);
     }
   } catch (e) {
@@ -522,4 +940,431 @@ async function handleDramaQuotes({ userId, drama, theme, level, refresh }) {
   return { quotes: items, cached: false };
 }
 
-module.exports = { handleChat, handleUpload, handlePronounce, handleChatStream, handleLessons, handleDramaQuotes, archiveSession, extractKoreanSentences, applyStatePatch, normalizeOut };
+/* =========================================================
+   学习画像引擎（Phase 4）
+   原则：评分只来自真实行为数据；缺证据的维度为 null（前端显示「待评估」）。
+   每个维度都能回答：输入是什么 → 怎么算的 → 依据是什么。
+   ========================================================= */
+
+const ABILITY_DIMS = [
+  { key: 'vocabulary', label: '词汇', weight: 0.2 },
+  { key: 'grammar', label: '语法', weight: 0.25 },
+  { key: 'pronunciation', label: '发音', weight: 0.2 },
+  { key: 'fluency', label: '流畅度', weight: 0.175 },
+  { key: 'naturalness', label: '自然度', weight: 0.175 }
+];
+
+const clampScore = (v) => Math.max(20, Math.min(96, Math.round(v)));
+
+// 活跃统计：每日 {turns, errors, new_words, pron_tries}，保留 90 天，自动重算连胜
+function touchStats(doc, delta) {
+  const st = doc.stats || (doc.stats = { daily: {}, streak_days: 0, last_active_date: '' });
+  st.daily = st.daily || {};
+  const day = today();
+  const d = st.daily[day] || (st.daily[day] = { turns: 0, errors: 0, new_words: 0, pron_tries: 0 });
+  d.turns += delta.turns || 0;
+  d.errors += delta.errors || 0;
+  d.new_words += delta.newWords || 0;
+  d.pron_tries += delta.pronTries || 0;
+  st.last_active_date = day;
+  const cutoff = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  for (const k of Object.keys(st.daily)) if (k < cutoff) delete st.daily[k];
+  st.streak_days = recomputeStreak(st.daily, day);
+}
+
+function recomputeStreak(daily, activeDay) {
+  const active = Object.keys(daily)
+    .filter((k) => {
+      const d = daily[k];
+      return (d.turns || 0) + (d.pron_tries || 0) > 0;
+    })
+    .sort();
+  if (!active.length) return 0;
+  const last = active[active.length - 1];
+  const gap = Math.round((new Date(activeDay + 'T00:00:00Z').getTime() - new Date(last + 'T00:00:00Z').getTime()) / 86400000);
+  if (gap > 1) return 0; // 昨天以前未活跃 → 连胜中断
+  let streak = 1;
+  for (let i = active.length - 2; i >= 0; i--) {
+    const diff = (new Date(active[i + 1] + 'T00:00:00Z').getTime() - new Date(active[i] + 'T00:00:00Z').getTime()) / 86400000;
+    if (diff === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
+// 跟读评分落库：发音维度唯一硬数据来源（ASR 识别 + AI 评分）
+function recordPronEval(doc, target, score, advice, asrText, source) {
+  const log = doc.progress.pron_eval_log || (doc.progress.pron_eval_log = []);
+  log.push({
+    target: String(target || '').slice(0, 60),
+    score,
+    advice: String(advice || '').slice(0, 120),
+    asr: String(asrText || '').slice(0, 60),
+    source: source || 'ai',
+    at: new Date().toISOString()
+  });
+  if (log.length > 60) doc.progress.pron_eval_log = log.slice(-60);
+  touchStats(doc, { pronTries: 1 });
+}
+
+// 「我会了」持久化（Phase 9）：用户自评掌握某句的真实行为，落库并返回最新计数
+function markPronMastered(userId, target) {
+  const doc = store.loadUser(userId);
+  const list = doc.progress.pron_mastered || (doc.progress.pron_mastered = []);
+  const t = String(target || '').trim().slice(0, 60);
+  if (t && !list.includes(t)) {
+    list.push(t);
+    if (list.length > 100) doc.progress.pron_mastered = list.slice(-100);
+    store.saveUser(doc);
+  }
+  return { mastered: doc.progress.pron_mastered.length };
+}
+
+// ===== K-pop 歌词学习（歌曲识别候选 + 歌词结构化划分 + 保存 + 生词入本）=====
+// 设计（可答辩边界）：
+// - 歌名由 AI 给出「候选」（标题/歌手/置信度），最终以用户确认为准 —— 不硬猜错歌，也不谎称「AI 识别成功」
+// - 歌词划分（分句/罗马音/翻译/词汇）由 LLM 结构化输出，代码侧做字段截断与行数封顶兜底
+// - 跟读评分复用 /api/pronounce 真实链路（ASR+AI），落库 pron_eval_log → 发音维度真实涨分
+// 默认只分析 24 句，显著减少模型输出 token；可通过环境变量 SONG_MAX_LINES 恢复到最多 40 句。
+const SONG_MAX_LINES = Math.max(12, Math.min(40, Number(process.env.SONG_MAX_LINES) || 24));
+const clampStr = (v, n) => String(v == null ? '' : v).trim().slice(0, n);
+
+function normalizeSongLines(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((l) => l && l.ko)
+    .slice(0, SONG_MAX_LINES)
+    .map((l) => ({
+      ko: clampStr(l.ko, 80),
+      romanization: clampStr(l.romanization || l.roman || l.romanization_text, 120),
+      translation: clampStr(l.translation || l.zh || l.meaning, 80),
+      grammar: clampStr(l.grammar || l.grammar_point || l.explain, 80),
+      vocab: (Array.isArray(l.vocab) ? l.vocab : (Array.isArray(l.words) ? l.words : []))
+        .filter((v) => v && (v.ko || v.word))
+        .slice(0, 4)
+        .map((v) => ({ ko: clampStr(v.ko || v.word, 20), zh: clampStr(v.zh || v.meaning || v.explain, 30) }))
+    }));
+}
+
+function songLineNeedsEnrichment(line) {
+  if (!line || !line.ko) return false;
+  const roman = line.romanization || line.roman || line.romanization_text;
+  const translation = line.translation || line.zh || line.meaning;
+  const grammar = line.grammar || line.grammar_point || line.explain;
+  const vocab = Array.isArray(line.vocab) ? line.vocab : (Array.isArray(line.words) ? line.words : []);
+  return !roman || !translation || !grammar || !vocab.length;
+}
+
+async function enrichSongParsed(parsed) {
+  if (!parsed || !Array.isArray(parsed.lines) || !parsed.lines.length) return parsed;
+  const lines = parsed.lines.slice(0, SONG_MAX_LINES);
+  if (!lines.some(songLineNeedsEnrichment)) return parsed;
+  let enriched = null;
+  try {
+    enriched = await llm.enrichSongLines(lines);
+  } catch (e) {
+    console.warn('[song] 学习字段补全异常：', e.message);
+  }
+  if (!Array.isArray(enriched) || !enriched.length) return parsed;
+  const byIndex = new Map(enriched.map((line, index) => [Number.isInteger(line && line.index) ? line.index : index, line]));
+  parsed.lines = lines.map((line, index) => {
+    const extra = byIndex.get(index) || {};
+    return Object.assign({}, line, extra, { ko: line.ko });
+  });
+  return parsed;
+}
+
+// 分析歌词：图片由 VLM 一次性输出结构化结果，文本由 LLM 输出；不落库（等待用户确认歌名）。
+async function handleSongAnalyze({ text, imageB64, source, songMeta }) {
+  const inputSource = source || (imageB64 ? 'image' : 'paste');
+  let raw = clampStr(text || '', 12000);
+  let parsed = null;
+
+  // 图片原来要串行调用「VLM OCR -> LLM 结构化」，现在一次 VLM 直接返回结构化结果。
+  // 这会少一次模型排队和一次完整输出传输，是图片分析提速的主要来源。
+  if (imageB64) {
+    try {
+      const out = await llm.analyzeSongImage(imageB64, SONG_MAX_LINES);
+      parsed = llm.extractJSON(out);
+    } catch (e) {
+      console.warn('[song] VLM 结构化分析失败，回退 OCR：', e.message);
+    }
+    // 只有直出 JSON 失败时才走旧的两步回退链路，正常请求不会触发。
+    if (!parsed || !Array.isArray(parsed.lines) || !parsed.lines.length) {
+      parsed = null;
+      try {
+        raw = (await llm.analyzeImage(imageB64)).trim();
+      } catch (e) {
+        console.warn('[song] 图片 OCR 失败：', e.message);
+      }
+    }
+  }
+
+  if (!parsed) {
+    raw = raw.trim();
+    if (!raw) throw new Error('没有识别到歌词内容，换一张更清晰的图片试试');
+
+    const prompt =
+      '你是韩语歌词学习教练。下面是用户明确提供的歌词原文。请严格只分析这段材料，不要联网猜歌，不要根据歌名、歌手或歌词片段补写任何材料外的歌词。' +
+      (inputSource === 'lrc' ? '其中【LRC 元数据】只用于提取歌名/歌手，【LRC 歌词原文】之后才是歌词；元数据和分隔标记都不能放入 lines。\n' : '\n') +
+      '请只输出一个 JSON 对象，不要任何其他文字：\n' +
+      '{\n' +
+      '  "summary": "只总结用户提供的原文内容，不得补充原文外信息",\n' +
+      '  "candidates": [{"title": "歌名", "artist": "歌手", "confidence": 0到1之间的小数}],\n' +
+      '  "lines": [\n' +
+      '    {"ko": "韩语原文一句", "romanization": "罗马音（给中国初学者，按音节连写）", "translation": "中文翻译", "grammar": "本句最值得学的一个语法点简述（可空）", "vocab": [{"ko": "单词", "zh": "中文释义"}]}\n' +
+      '  ]\n' +
+      '}\n' +
+      '要求：\n' +
+      '1. candidates 只允许提取这段材料中明确出现的歌名和歌手；材料没有明确歌名/歌手时必须输出空数组，禁止根据歌词内容猜歌。\n' +
+      '2. 如果材料第一行是「歌名 - 歌手」标题行，可以提取为 candidates；标题行不是歌词，不要放进 lines。\n' +
+      '3. lines 只能来自这段材料中实际出现的歌词，按原顺序保留，最多 ' + SONG_MAX_LINES + ' 句；不要去网上补全、不要补写下一句、不要擅自添加重复副歌。\n' +
+      '4. 每句必须填写 romanization、translation、grammar；vocab 至少给 2 个来自本句的核心词，不能只返回 ko。\n' +
+      '5. romanization 用英文小写并按音节用连字符拼读，方便中国零基础学生直读。\n' +
+      '6. grammar 用中文只解释本句实际出现的语法，translation 用自然简短中文。\n' +
+      '7. summary 用中文概括这段原文表达的主题或情绪；原文太短时如实说明，不要根据歌名或常识猜测。\n\n' +
+      '用户提供的原文（只能分析以下内容）：\n' + raw;
+
+    try {
+      const out = await llm.chatText([{ role: 'user', content: prompt }], 0.4);
+      parsed = llm.extractJSON(out);
+    } catch (e) {
+      console.warn('[song] LLM 歌词分析失败：', e.message);
+    }
+  }
+  // 兜底：模型没给结构化结果时，按行切分韩文原文（罗马音/翻译留空，前端只展示可跟读的原文）
+  if (!parsed || !Array.isArray(parsed.lines) || !parsed.lines.length) {
+    parsed = {
+      candidates: [],
+      lines: raw
+        .split(/\n+/)
+        .map((s) => ({ ko: clampStr(s, 80), romanization: '', translation: '', grammar: '', vocab: [] }))
+        .filter((l) => l.ko && /[\uAC00-\uD7A3]/.test(l.ko))
+        .slice(0, SONG_MAX_LINES)
+    };
+  }
+
+  // 视觉模型若只识别出韩文，补一轮轻量学习字段，确保零基础用户不会只看到原文。
+  parsed = await enrichSongParsed(parsed);
+  const modelCandidates = (Array.isArray(parsed.candidates) ? parsed.candidates : [])
+    .slice(0, 3)
+    .map((c) => ({
+      title: clampStr(c && c.title, 60),
+      artist: clampStr(c && c.artist, 40),
+      confidence: Math.max(0, Math.min(1, Number(c && c.confidence) || 0))
+    }))
+    .filter((c) => c.title);
+  const explicitCandidate = songMeta && (songMeta.title || songMeta.artist)
+    ? [{ title: clampStr(songMeta.title, 60), artist: clampStr(songMeta.artist, 40), confidence: 1 }]
+    : [];
+  const candidates = explicitCandidate.concat(modelCandidates.filter((candidate) =>
+    !explicitCandidate.some((explicit) => explicit.title && explicit.title === candidate.title)
+  )).slice(0, 3);
+  return {
+    summary: clampStr(parsed.summary || parsed.overview || parsed.theme, 160),
+    candidates,
+    lines: normalizeSongLines(parsed.lines),
+    mode: inputSource,
+    source: inputSource
+  };
+}
+
+// 保存歌词课程：歌名为用户确认后的值（或用户手输），这是「真实数据」而非 AI 猜的
+function handleSongSave({ userId, title, artist, summary, lines }) {
+  const t = clampStr(title, 60);
+  if (!t) throw new Error('歌名不能为空');
+  const clean = normalizeSongLines(lines);
+  if (!clean.length) throw new Error('歌词为空，无法保存');
+  const doc = store.loadUser(userId);
+  const list = doc.progress.song_lessons || (doc.progress.song_lessons = []);
+  const song = {
+    id: 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    title: t,
+    artist: clampStr(artist, 40),
+    summary: clampStr(summary, 160),
+    lines: clean,
+    at: new Date().toISOString()
+  };
+  list.push(song);
+  doc.progress.song_lessons = list.slice(-30);
+  store.saveUser(doc);
+  return { ok: true, song };
+}
+
+// 歌词生词一键入本：复用聊天同款 SRS 逻辑；仅「新词」计入每日统计，重复添加只增加熟悉度
+function handleSongVocab({ userId, ko, zh }) {
+  const word = clampStr(ko, 20);
+  if (!word) throw new Error('生词不能为空');
+  const doc = store.loadUser(userId);
+  const pr = doc.progress;
+  const found = pr.vocab.find((x) => x.ko === word);
+  if (found) {
+    found.seen = (found.seen || 1) + 1;
+    store.saveUser(doc);
+    return { ok: true, added: false, total: pr.vocab.length };
+  }
+  applyStatePatch(doc, { vocab_add: [{ ko: word, zh: clampStr(zh, 30) }] });
+  touchStats(doc, { newWords: 1 });
+  store.saveUser(doc);
+  return { ok: true, added: true, total: pr.vocab.length };
+}
+
+function handleSongList(userId) {
+  const doc = store.loadUser(userId);
+  const songs = (doc.progress.song_lessons || []).slice(-30).reverse();
+  return {
+    songs: songs.map((s) => ({ id: s.id, title: s.title, artist: s.artist, lineCount: (s.lines || []).length, at: s.at }))
+  };
+}
+
+function handleSongDelete(userId, songId) {
+  const id = clampStr(songId, 80);
+  if (!id) throw new Error('歌曲 ID 不能为空');
+  const doc = store.loadUser(userId);
+  const list = doc.progress.song_lessons || [];
+  const index = list.findIndex((song) => song && song.id === id);
+  if (index < 0) throw new Error('歌曲不存在或已被删除');
+  const removed = list[index];
+  list.splice(index, 1);
+  doc.progress.song_lessons = list;
+  store.saveUser(doc);
+  return { ok: true, deletedId: id, title: removed.title || '' };
+}
+
+async function handleSongGet(userId, songId) {
+  const doc = store.loadUser(userId);
+  const song = (doc.progress.song_lessons || []).find((s) => s.id === songId);
+  if (!song) throw new Error('歌曲不存在或已被清理');
+
+  // 兼容在加入罗马音/语法分析前保存的旧歌曲：打开时自动补全并持久化。
+  const before = JSON.stringify(song.lines || []);
+  const parsed = await enrichSongParsed({ lines: song.lines || [] });
+  const normalized = normalizeSongLines(parsed.lines || []);
+  song.lines = normalized;
+  if (JSON.stringify(normalized) !== before) {
+    store.saveUser(doc);
+  }
+  return { song };
+}
+
+// 能力评分计算：纯代码公式 + 真实数据，输出各维度分数或 null（证据不足）
+function computeScores(doc) {
+  const pr = doc.progress || {};
+  const scores = { vocabulary: null, grammar: null, pronunciation: null, fluency: null, naturalness: null };
+  const basis = {};
+
+  // 发音：最近评分加权（近 3 次占 60%）
+  const pronLog = (pr.pron_eval_log || []).slice(-10);
+  if (pronLog.length >= 1) {
+    const avg = pronLog.reduce((s, e) => s + (e.score || 0), 0) / pronLog.length;
+    const recent = pronLog.slice(-3);
+    const recentAvg = recent.reduce((s, e) => s + (e.score || 0), 0) / recent.length;
+    scores.pronunciation = clampScore(avg * 0.4 + recentAvg * 0.6);
+    basis.pronunciation = '基于最近 ' + pronLog.length + ' 次跟读评分（ASR+AI 评测）';
+  }
+
+  // 语法：掌握语法加分、纠错记录减分（数据驱动估算）
+  const mastered = (pr.grammar_mastered || []).length;
+  const errN = (pr.error_log || []).length;
+  if (mastered > 0 || errN > 0) {
+    scores.grammar = clampScore(50 + Math.min(mastered, 6) * 6 - Math.min(errN, 12) * 2.5);
+    basis.grammar = '已掌握 ' + mastered + ' 个语法 · ' + errN + ' 条纠错记录';
+  }
+
+  // 词汇：SRS 词汇库规模 + 进入复习的词数
+  const vocab = pr.vocab || [];
+  const known = vocab.filter((v) => (v.seen || 0) >= 2 || (v.srs_stage || 0) >= 2).length;
+  if (vocab.length >= 3) {
+    scores.vocabulary = clampScore(30 + Math.min(known, 30) * 2 + Math.min(Math.max(vocab.length - known, 0), 20) * 0.5);
+    basis.vocabulary = '收录 ' + vocab.length + ' 词 · 进入复习 ' + known + ' 词';
+  }
+
+  // 流畅度 / 自然度：对话 AI 定性评估累积（quality_log，容忍缺项）
+  const qual = pr.quality_log || [];
+  const fluVals = qual.slice(-8).map((e) => e.fluency).filter((v) => typeof v === 'number' && v > 0);
+  const natVals = qual.slice(-8).map((e) => e.naturalness).filter((v) => typeof v === 'number' && v > 0);
+  if (fluVals.length >= 3) {
+    scores.fluency = clampScore(fluVals.reduce((s, v) => s + v, 0) / fluVals.length);
+    basis.fluency = '基于 ' + fluVals.length + ' 轮对话的 AI 定性评估';
+  }
+  if (natVals.length >= 3) {
+    scores.naturalness = clampScore(natVals.reduce((s, v) => s + v, 0) / natVals.length);
+    basis.naturalness = '基于 ' + natVals.length + ' 轮对话的 AI 定性评估';
+  }
+
+  // 综合：≥3 个维度有证据才给出总分（权重按可用维度归一）
+  const available = ABILITY_DIMS.filter((d) => scores[d.key] != null);
+  if (available.length >= 3) {
+    const wSum = available.reduce((s, d) => s + d.weight, 0);
+    const overall = available.reduce((s, d) => s + scores[d.key] * d.weight, 0) / wSum;
+    scores.overall = Math.round(overall);
+    basis.overall = '综合 ' + available.length + ' 项可评估维度';
+  }
+
+  const result = { ...scores, basis };
+  persistScores(doc, result);
+  return result;
+}
+
+// 分数变化 ≥2 分才落库 + 写趋势快照（最多 30 条）
+// 完全无证据（所有维度 null）时不落库：保持「未评估」原始态，不产生虚假的评估时间
+function persistScores(doc, scores) {
+  const hasAny = ABILITY_DIMS.some((d) => scores[d.key] != null);
+  if (!hasAny) return;
+  const old = doc.progress.scores;
+  const changed = !old || ABILITY_DIMS.some((d) => Math.abs(((old[d.key] == null ? null : old[d.key]) || 0) - (scores[d.key] == null ? 0 : scores[d.key])) >= 2) || (old.overall == null) !== (scores.overall == null);
+  if (!changed) return;
+  const snap = { at: new Date().toISOString(), ...scores };
+  doc.progress.scores = snap;
+  const hist = doc.progress.score_history || (doc.progress.score_history = []);
+  hist.push({ at: snap.at, overall: scores.overall, vocabulary: scores.vocabulary, grammar: scores.grammar, pronunciation: scores.pronunciation, fluency: scores.fluency, naturalness: scores.naturalness });
+  if (hist.length > 30) doc.progress.score_history = hist.slice(-30);
+  store.saveUser(doc);
+}
+
+// 近 7 日统计（学习报告/首页用；minutes 为按对话轮数估算口径，每轮约 0.75 分钟）
+function weekStats(st) {
+  let weekTurns = 0, weekErrors = 0, weekWords = 0, weekPron = 0;
+  const daily = st.daily || {};
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    const rec = daily[d];
+    if (rec) {
+      weekTurns += rec.turns || 0;
+      weekErrors += rec.errors || 0;
+      weekWords += rec.new_words || 0;
+      weekPron += rec.pron_tries || 0;
+    }
+  }
+  return {
+    streak_days: st.streak_days || 0,
+    week_turns: weekTurns,
+    week_minutes_est: Math.round(weekTurns * 0.75),
+    week_errors: weekErrors,
+    week_words: weekWords,
+    week_pron: weekPron
+  };
+}
+
+// 能力画像 API 出口：懒计算 + 变化落库
+function getAbilities(userId) {
+  const doc = store.loadUser(userId);
+  const scores = computeScores(doc);
+  return {
+    level: (doc.profile || {}).level || '',
+    dims: ABILITY_DIMS.map((d) => ({
+      key: d.key,
+      label: d.label,
+      score: scores[d.key] == null ? null : scores[d.key],
+      basis: (scores.basis && scores.basis[d.key]) || ''
+    })),
+    overall: scores.overall == null ? null : scores.overall,
+    overallBasis: (scores.basis && scores.basis.overall) || '',
+    updatedAt: (doc.progress.scores && doc.progress.scores.at) || null,
+    history: doc.progress.score_history || [],
+    stats: weekStats(doc.stats || {}),
+    pronLog: (doc.progress.pron_eval_log || []).slice(-5)
+  };
+}
+
+module.exports = { handleChat, handleUpload, handlePronounce, handleChatStream, handleScenarioEnd, handleLessons, handleDramaQuotes, handleReport, handleDemoNext, handleDemoReset, handleSongAnalyze, handleSongSave, handleSongVocab, handleSongList, handleSongDelete, handleSongGet, archiveSession, extractKoreanSentences, applyStatePatch, normalizeOut, touchStats, recordPronEval, markPronMastered, getAbilities, computeScores, computeDifficulty };

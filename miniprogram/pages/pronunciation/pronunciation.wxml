@@ -37,6 +37,18 @@
     </view>
   </view>
 
+  <!-- ===== K-pop 学歌入口 ===== -->
+  <view class="song-entry stick pop pop-2" bindtap="onGoSong">
+    <view class="se-left">
+      <text class="se-ico">🎤</text>
+      <view class="se-txt">
+        <view class="se-t">K-pop 学歌</view>
+        <view class="se-s">上传歌词 · AI 分句讲解 · 跟读评分</view>
+      </view>
+    </view>
+    <text class="se-arrow">→</text>
+  </view>
+
   <!-- ===== 练习区 ===== -->
   <view class="practice stick tilt-m pop pop-2">
     <view class="practice-head">
@@ -99,6 +111,18 @@
           </view>
         </block>
       </view>
+      <!-- 评分依据透明化 + 再试一次（Phase 9） -->
+      <view class="eval-src">{{lastEval.src === 'fallback' ? '依据：ASR 相似度估算（AI 评分暂不可用）' : '依据：ASR 识别 + AI 发音评测'}}</view>
+      <view class="eval-retry" wx:if="{{lastEval.score < 85}}" bindtap="onRetryPron">🎤 再试一次，冲击更高分</view>
+    </view>
+
+    <!-- 最近评分趋势（真实落库数据） -->
+    <view class="pron-trend" wx:if="{{pronTrend.length >= 2}}">
+      <text class="pt-label">最近评分</text>
+      <block wx:for="{{pronTrend}}" wx:key="index">
+        <text class="pt-val">{{item}}</text>
+        <text class="pt-arrow" wx:if="{{index < pronTrend.length - 1}}">→</text>
+      </block>
     </view>
 
     <!-- 录音浮层 -->

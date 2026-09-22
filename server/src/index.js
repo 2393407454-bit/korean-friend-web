@@ -10,6 +10,7 @@ const agent = require('./agent');
 const store = require('./store');
 const security = require('./security');
 const characters = require('./characters');
+const scenarios = require('./scenarios');
 const feedback = require('./feedback');
 
 const app = express();
@@ -39,9 +40,9 @@ app.post('/api/session', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { userId, text, channel, mode, frame_base64, characterId } = req.body || {};
+    const { userId, text, channel, mode, frame_base64, characterId, scenarioId } = req.body || {};
     if (!userId) return res.status(400).json({ error: 'userId required' });
-    const out = await agent.handleChat({ userId, text: text || '', channel: channel || 'text', mode, frameBase64: frame_base64, characterId });
+    const out = await agent.handleChat({ userId, text: text || '', channel: channel || 'text', mode, frameBase64: frame_base64, characterId, scenarioId });
     res.json(out);
   } catch (e) {
     console.error('[chat]', e.message);
@@ -52,7 +53,7 @@ app.post('/api/chat', async (req, res) => {
 // 流式对话：SSE 帧 data: {"t":"增量"} … data: {"done":true,...}
 // 非 ASCII 全部 \u 转义，规避前端分块截断多字节字符的问题
 app.post('/api/chat/stream', async (req, res) => {
-  const { userId, text, channel, mode, characterId } = req.body || {};
+  const { userId, text, channel, mode, characterId, scenarioId } = req.body || {};
   if (!userId || !text) return res.status(400).json({ error: 'userId/text required' });
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -70,10 +71,10 @@ app.post('/api/chat/stream', async (req, res) => {
 
   try {
     const final = await agent.handleChatStream({
-      userId, text, channel: channel || 'text', mode, characterId,
+      userId, text, channel: channel || 'text', mode, characterId, scenarioId,
       onDelta: (d) => send({ t: d })
     });
-    send({ done: true, display: final.display, speech: final.speech, korean_sentences: final.korean_sentences, profile: final.profile });
+    send({ done: true, display: final.display, speech: final.speech, korean_sentences: final.korean_sentences, errors: final.errors, mastered: final.mastered, profile: final.profile });
   } catch (e) {
     console.error('[chat/stream]', e.message);
     send({ error: e.status === 429 ? e.message : '服务开小差了：' + e.message });
@@ -83,6 +84,58 @@ app.post('/api/chat/stream', async (req, res) => {
 
 app.get('/api/characters', (req, res) => {
   res.json({ characters: characters.list(), default: characters.DEFAULT_ID });
+});
+
+// 情景对练场景库
+app.get('/api/scenarios', (req, res) => {
+  res.json({ scenarios: scenarios.list() });
+});
+
+// 结束情景并生成复盘
+app.post('/api/scenario/end', async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.json(await agent.handleScenarioEnd({ userId }));
+  } catch (e) {
+    console.error('[scenario/end]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 结构化学习报告（数据引擎 + AI 评语可选增强）
+app.post('/api/report', async (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.json(await agent.handleReport({ userId }));
+  } catch (e) {
+    console.error('[report]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// —— Demo 模式（Phase 12）：预置剧本，比赛现场零网络风险 ——
+app.post('/api/demo/next', (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.json(agent.handleDemoNext({ userId }));
+  } catch (e) {
+    console.error('[demo]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/demo/reset', (req, res) => {
+  try {
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.json(agent.handleDemoReset({ userId }));
+  } catch (e) {
+    console.error('[demo]', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/session/new', async (req, res) => {
@@ -97,26 +150,31 @@ app.post('/api/session/new', async (req, res) => {
 
 app.post('/api/asr', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) return res.status(400).json({ error: 'audio file required' });
     const text = await llm.transcribe(req.file.path);
-    fs.unlink(req.file.path, () => {});
     res.json({ text: text || '' });
   } catch (e) {
-    console.error('[asr]', e);
-    res.status(500).json({ error: e.message });
+    console.error('[asr]', e.message);
+    res.status(e.status === 429 ? 429 : 503).json({ error: '语音识别暂时不可用，请重试' });
+  } finally {
+    if (req.file) fs.unlink(req.file.path, () => {});
   }
 });
 
 app.post('/api/tts', async (req, res) => {
   try {
-    const audioBase64 = await llm.synthesize((req.body && req.body.text) || '');
+    const text = String((req.body && req.body.text) || '').trim().slice(0, 400);
+    if (!text) return res.status(400).json({ error: 'text required' });
+    const audioBase64 = await llm.synthesize(text);
     res.json({ audio_base64: audioBase64 });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    res.status(503).json({ error: '语音播报暂时不可用，请稍后重试' });
   }
 });
 
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) return res.status(400).json({ error: 'file required' });
     const userId = req.body.userId;
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const out = await agent.handleUpload({ userId, file: req.file, mode: req.body.mode });
@@ -129,15 +187,16 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
 
 app.post('/api/pronounce', upload.single('file'), async (req, res) => {
   try {
+    if (!req.file) return res.status(400).json({ error: 'audio file required' });
     const target = (req.body && req.body.target) || '';
     if (!target) return res.status(400).json({ error: 'target required' });
-    const out = await agent.handlePronounce({ target, audioPath: req.file.path });
-    fs.unlink(req.file.path, () => {});
+    const out = await agent.handlePronounce({ target, audioPath: req.file.path, userId: (req.body && req.body.userId) || '' });
     res.json(out);
   } catch (e) {
-    if (req.file) fs.unlink(req.file.path, () => {});
     console.error('[pronounce]', e.message);
-    res.status(500).json({ error: e.message });
+    res.status(e.status === 503 ? 503 : 500).json({ error: e.message });
+  } finally {
+    if (req.file) fs.unlink(req.file.path, () => {});
   }
 });
 
@@ -150,6 +209,108 @@ app.post('/api/pronounce/lessons', async (req, res) => {
   } catch (e) {
     console.error('[lessons]', e.message);
     res.status(500).json({ error: e.message });
+  }
+});
+
+// 「我会了」持久化（Phase 9）
+app.post('/api/pronounce/mastered', (req, res) => {
+  try {
+    const { userId, target } = req.body || {};
+    if (!userId || !target) return res.status(400).json({ error: 'userId/target required' });
+    res.json(agent.markPronMastered(userId, target));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===== K-pop 歌词学习：识别候选 + 结构化划分 + 保存 + 生词入本 =====
+app.post('/api/song/analyze', upload.single('file'), async (req, res) => {
+  try {
+    let imageB64 = null;
+    let text = (req.body && req.body.text) || '';
+    const source = (req.body && req.body.source) || '';
+    const file = req.file;
+    const ext = file ? path.extname(file.originalname || '').toLowerCase() : '';
+    const isImage = !!(file && /^image\//.test(file.mimetype || ''));
+    const isTextFile = !!(file && ext === '.lrc');
+    let songMeta = null;
+
+    if (isImage) {
+      imageB64 = fs.readFileSync(file.path).toString('base64');
+    } else if (file && isTextFile) {
+      // LRC 先在服务端去除时间戳/元数据，再把纯歌词原文交给 AI，避免模型把标签当歌词。
+      const lrc = fs.readFileSync(file.path, 'utf8').replace(/^\uFEFF/, '');
+      const titleMatch = lrc.match(/^\s*\[ti:(.*?)\]\s*$/im);
+      const artistMatch = lrc.match(/^\s*\[ar:(.*?)\]\s*$/im);
+      songMeta = {
+        title: titleMatch && titleMatch[1] ? titleMatch[1].trim() : '',
+        artist: artistMatch && artistMatch[1] ? artistMatch[1].trim() : ''
+      };
+      const lyricLines = lrc.split(/\r?\n/).map((line) => {
+        return line.replace(/^\s*(?:\[[0-9]{1,2}:\d{2}(?:\.\d{1,3})?\])+\s*/, '').trim();
+      }).filter((line) => line && !/^\[(?:ti|ar|al|by|offset):/i.test(line));
+      const header = [];
+      if (titleMatch && titleMatch[1].trim()) header.push('歌名: ' + titleMatch[1].trim());
+      if (artistMatch && artistMatch[1].trim()) header.push('歌手: ' + artistMatch[1].trim());
+      text = (header.length ? ['【LRC 元数据，仅用于识别歌名和歌手，不是歌词】'].concat(header, ['【LRC 歌词原文】']) : []).concat(lyricLines).join('\n');
+    } else if (file) {
+      return res.status(400).json({ error: '只支持图片或 LRC 歌词文件' });
+    }
+
+    const out = await agent.handleSongAnalyze({
+      text,
+      imageB64,
+      source: source || (isImage ? 'image' : (isTextFile ? 'lrc' : 'paste')),
+      songMeta
+    });
+    res.json(out);
+  } catch (e) {
+    console.error('[song/analyze]', e.message);
+    res.status(500).json({ error: e.message });
+  } finally {
+    if (req.file) fs.unlink(req.file.path, () => {});
+  }
+});
+
+app.post('/api/song/save', (req, res) => {
+  try {
+    res.json(agent.handleSongSave(req.body || {}));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.post('/api/song/vocab', (req, res) => {
+  try {
+    res.json(agent.handleSongVocab(req.body || {}));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+app.get('/api/song/list/:uid', (req, res) => {
+  try {
+    res.json(agent.handleSongList(req.params.uid));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/song/delete', (req, res) => {
+  try {
+    const { userId, songId } = req.body || {};
+    if (!userId || !songId) return res.status(400).json({ error: 'userId/songId required' });
+    res.json(agent.handleSongDelete(userId, songId));
+  } catch (e) {
+    res.status(404).json({ error: e.message });
+  }
+});
+
+app.get('/api/song/get/:uid/:songId', async (req, res) => {
+  try {
+    res.json(await agent.handleSongGet(req.params.uid, req.params.songId));
+  } catch (e) {
+    res.status(404).json({ error: e.message });
   }
 });
 
@@ -207,6 +368,15 @@ app.get('/api/profile/:uid', (req, res) => {
   res.json(store.loadUser(req.params.uid));
 });
 
+// 能力画像：数据驱动评分（缺证据维度为 null = 待评估）
+app.get('/api/abilities/:uid', (req, res) => {
+  try {
+    res.json(agent.getAbilities(req.params.uid));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/profile/:uid/update', (req, res) => {
   try {
     const doc = store.loadUser(req.params.uid);
@@ -256,7 +426,33 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`한국이 친구 server listening on http://localhost:${PORT}`);
+
+// 列出本机所有局域网 IPv4，手机热点/换网后 IP 会变，启动日志直接给出该填进
+// miniprogram/utils/config.js 的 BASE_URL
+const lanIPs = () => {
+  const out = [];
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (a.family === 'IPv4' && !a.internal) out.push(a.address);
+    }
+  }
+  return out;
+};
+
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`한국어 친구 server listening on http://localhost:${PORT}`);
+  const ips = lanIPs();
+  if (ips.length) {
+    console.log('局域网访问（填入 miniprogram/utils/config.js 的 BASE_URL）:');
+    for (const ip of ips) console.log(`  http://${ip}:${PORT}`);
+  }
   console.log('caps:', JSON.stringify(llm.caps()));
+});
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`[server] 端口 ${PORT} 已被占用，请先停止旧服务或改用 PORT=...`);
+  } else {
+    console.error('[server] 启动失败：', err && err.message ? err.message : err);
+  }
+  process.exitCode = 1;
 });

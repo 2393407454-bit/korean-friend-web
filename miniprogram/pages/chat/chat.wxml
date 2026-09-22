@@ -1,10 +1,10 @@
 <view class="page">
-  <!-- 贴纸装饰层（纯装饰，置底） -->
+  <!-- 贴纸装饰层（纯装饰，置底，避开顶部状态栏与底部操作条） -->
   <view class="sticker-layer">
-    <view class="sk sk-float-a" style="top:30rpx;left:-10rpx;">
+    <view class="sk sk-float-a" style="top:62%;left:-10rpx;">
       <view class="sk-emoji">🤖</view>
     </view>
-    <view class="sk sk-float-c" style="bottom:300rpx;left:20rpx;">
+    <view class="sk sk-float-c" style="bottom:38%;left:20rpx;">
       <view class="sk-emoji">🐻‍❄️</view>
     </view>
   </view>
@@ -31,11 +31,28 @@
         <text>{{character.tagline}} · {{status === 'typing' ? '输入中…' : '在线倾听中'}}</text>
       </view>
     </view>
-    <view class="sb-new" bindtap="onNewSession">🔄 新对话</view>
+    <view class="sb-new" wx:if="{{!demoMode}}" bindtap="onNewSession">🔄 新对话</view>
+  </view>
+
+  <!-- 演示模式标识（Phase 12） -->
+  <view class="demo-mark" wx:if="{{demoMode}}">演示数据 · 预置剧本</view>
+
+  <!-- ===== 进行中的情景条 ===== -->
+  <view class="sc-bar" wx:if="{{currentScenario}}">
+    <view class="sc-info">
+      <text class="sc-ico">{{currentScenario.icon}}</text>
+      <view class="sc-txt">
+        <view class="sc-name">{{currentScenario.name}} · {{currentScenario.name_ko}}</view>
+        <view class="sc-role">你面对：{{currentScenario.ai_role}}</view>
+      </view>
+    </view>
+    <view class="sc-end {{scenarioEnding ? 'sc-end-off' : ''}}" catchtap="onScenarioEnd">
+      {{scenarioEnding ? '复盘生成中…' : '结束复盘'}}
+    </view>
   </view>
 
   <!-- ===== 模式切换 ===== -->
-  <scroll-view class="modes" scroll-x enable-flex>
+  <scroll-view class="modes" scroll-x enable-flex wx:if="{{!demoMode}}">
     <view
       wx:for="{{modes}}"
       wx:key="label"
@@ -46,7 +63,7 @@
   </scroll-view>
 
   <!-- ===== 话题模板 ===== -->
-  <scroll-view class="topics" scroll-x enable-flex>
+  <scroll-view class="topics" scroll-x enable-flex wx:if="{{!demoMode}}">
     <view
       wx:for="{{topics}}"
       wx:key="label"
@@ -71,6 +88,31 @@
       id="msg-{{index}}"
       class="bubble-row {{item.role}} msg-pop"
     >
+      <!-- 情景复盘评分卡（系统消息） -->
+      <block wx:if="{{item.role === 'sys'}}">
+        <view class="rep-card">
+          <view class="rep-head">
+            <view class="rep-score-wrap">
+              <view class="rep-score">{{item.report.score}}</view>
+              <view class="rep-score-cap">/ 100</view>
+            </view>
+            <view class="rep-title">
+              <view class="rep-t1">📋 {{item.report.scene_name}} · 情景复盘</view>
+              <view class="rep-t2" wx:if="{{item.report.summary}}">{{item.report.summary}}</view>
+            </view>
+          </view>
+          <view class="rep-sec" wx:if="{{item.report.highlights.length}}">
+            <view class="rep-sec-t">✓ 做得好的</view>
+            <view class="rep-li rep-li-good" wx:for="{{item.report.highlights}}" wx:key="*this" wx:for-item="h">{{h}}</view>
+          </view>
+          <view class="rep-sec" wx:if="{{item.report.improvements.length}}">
+            <view class="rep-sec-t">⚠ 下次注意</view>
+            <view class="rep-li rep-li-bad" wx:for="{{item.report.improvements}}" wx:key="*this" wx:for-item="im">{{im}}</view>
+          </view>
+        </view>
+      </block>
+
+      <block wx:else>
       <view class="ava ava-asst" wx:if="{{item.role === 'assistant'}}">{{character.avatar}}</view>
 
       <view class="bubble {{item.role}} {{item.pending ? 'pending' : ''}}">
@@ -98,6 +140,35 @@
             </view>
           </view>
 
+          <!-- 结构化纠错卡（后端 state_patch.errors） -->
+          <view class="err-cards" wx:if="{{item.errors && item.errors.length}}">
+            <view class="err-card" wx:for="{{item.errors}}" wx:key="index" wx:for-item="err">
+              <view class="ec-head">
+                <view class="ec-type">✏️ {{err.typeLabel}}</view>
+                <view class="ec-point" wx:if="{{err.point}}">{{err.point}}</view>
+                <view class="ec-sev-high" wx:if="{{err.severity === 'high'}}">易错</view>
+              </view>
+              <view class="ec-line">
+                <text class="ec-wrong">{{err.wrong}}</text>
+                <text class="ec-arrow">→</text>
+                <text class="ec-right">{{err.right}}</text>
+              </view>
+              <view class="ec-explain" wx:if="{{err.explain}}">{{err.explain}}</view>
+            </view>
+          </view>
+
+          <!-- 掌握祝贺卡（错误记忆闭环：再检测 → 掌握） -->
+          <view class="mas-cards" wx:if="{{item.mastered && item.mastered.length}}">
+            <view class="mas-card" wx:for="{{item.mastered}}" wx:key="index" wx:for-item="m">
+              <view class="mas-title">🎉 已掌握「{{m.point}}」的使用！</view>
+              <view class="mas-line" wx:if="{{m.wrong}}">
+                <text class="mas-wrong">{{m.wrong}}</text>
+                <text class="mas-arrow">→</text>
+                <text class="mas-right">{{m.right}}</text>
+              </view>
+            </view>
+          </view>
+
           <!-- 操作条 -->
           <view class="ops" wx:if="{{item.role === 'assistant'}}">
             <view class="op tag tag-cream" data-speech="{{item.speech || item.text}}" bindtap="onSpeakTap">🔊 读</view>
@@ -118,6 +189,7 @@
       </view>
 
       <view class="ava ava-user" wx:if="{{item.role === 'user'}}">🧑</view>
+      </block>
     </view>
 
     <view class="msg-end"></view>
@@ -143,8 +215,52 @@
     </view>
   </view>
 
+  <!-- ===== 情景选择面板（底部弹层） ===== -->
+  <view class="sheet-mask {{scenarioSheet ? 'sheet-mask-on' : ''}}" bindtap="onSheetClose"></view>
+  <view class="sheet {{scenarioSheet ? 'sheet-up' : ''}}">
+    <view class="sheet-head">
+      <text class="sheet-title">역할극 情景对练</text>
+      <view class="sheet-close" bindtap="onSheetClose">✕</view>
+    </view>
+    <scroll-view scroll-y class="sheet-body">
+      <view class="sheet-hint">选择一个真实生活场景，AI 扮演其中的角色，陪你完成任务。</view>
+      <view class="sc-cat" wx:for="{{scenarioGroups}}" wx:key="cat" wx:for-item="grp">
+        <view class="sc-cat-name">{{grp.cat}}</view>
+        <view class="sc-grid">
+          <view
+            class="sc-item"
+            wx:for="{{grp.items}}"
+            wx:key="id"
+            wx:for-item="s"
+            data-id="{{s.id}}"
+            bindtap="onScenarioTap"
+          >
+            <view class="si-ico">{{s.icon}}</view>
+            <view class="si-info">
+              <view class="si-name">{{s.name}}</view>
+              <view class="si-meta">
+                <text class="si-ko">{{s.name_ko}}</text>
+                <text class="si-level">{{s.level}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+    <view style="height: calc(env(safe-area-inset-bottom) + 20rpx);"></view>
+  </view>
+
+  <!-- ===== Demo 控制条（Phase 12） ===== -->
+  <view class="demo-bar" wx:if="{{demoMode}}">
+    <view class="db-btn" bindtap="onDemoExit">退出</view>
+    <view class="db-btn" bindtap="onDemoRestart">重置</view>
+    <view class="db-next {{demoBusy || demoFinished ? 'db-next-off' : ''}}" bindtap="onDemoNext">
+      {{demoFinished ? '演示完成 ✓' : '下一步 →'}}
+    </view>
+  </view>
+
   <!-- ===== 底部输入栏 ===== -->
-  <view class="ibar">
+  <view class="ibar" wx:if="{{!demoMode}}">
     <view class="ibtn" bindtap="onUploadTap">📎</view>
     <view class="input-wrap">
       <input
