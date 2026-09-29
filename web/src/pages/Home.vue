@@ -5,7 +5,6 @@ import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { get } from '../api/client';
 import { currentUid, storeSet } from '../utils/storage';
-import { showToast } from '../utils/ui';
 import ConfirmModal from '../components/ConfirmModal.vue';
 
 const router = useRouter();
@@ -21,11 +20,11 @@ const GOAL_TEXT = {
 
 // 五维能力：由后端评分引擎（/api/abilities）写入真实分数；无证据时 score 为 null → 待评估
 const DIMS = [
-  { key: 'vocabulary', label: '词汇', icon: '📒', score: null, hasScore: false },
-  { key: 'grammar', label: '语法', icon: '📚', score: null, hasScore: false },
-  { key: 'pronunciation', label: '发音', icon: '🎤', score: null, hasScore: false },
-  { key: 'fluency', label: '流畅度', icon: '💬', score: null, hasScore: false },
-  { key: 'naturalness', label: '自然度', icon: '✨', score: null, hasScore: false }
+  { key: 'vocabulary', label: '词汇', score: null, hasScore: false },
+  { key: 'grammar', label: '语法', score: null, hasScore: false },
+  { key: 'pronunciation', label: '发音', score: null, hasScore: false },
+  { key: 'fluency', label: '流畅度', score: null, hasScore: false },
+  { key: 'naturalness', label: '自然度', score: null, hasScore: false }
 ];
 
 const WEEK_CN = ['日', '一', '二', '三', '四', '五', '六'];
@@ -140,176 +139,156 @@ load();
 <template>
   <div class="page page-tab">
     <!-- ===== 顶部：品牌 + 等级 ===== -->
-    <div class="hero">
+    <header class="hero rise rise-1">
       <div class="hero-left">
-        <div class="hero-title">오늘의 한국어</div>
+        <div class="h-page">오늘의 한국어</div>
         <div class="hero-sub">{{ dateLabel }} · AI 教练 Han 陪练中</div>
       </div>
-      <div class="hero-level" @click="router.push('/profile')">
-        <div class="hl-badge" :class="{ 'hl-on': data.level }">
-          <span class="hl-ko">{{ data.level || '未定级' }}</span>
-        </div>
-        <div class="hl-cap">{{ data.level ? 'TOPIK 等级' : '完成测试解锁' }}</div>
-      </div>
-      <div class="hero-mark">한국어</div>
-    </div>
+      <button class="hero-level" @click="router.push('/profile')">
+        <span class="hl-badge" :class="{ 'hl-on': data.level }">{{ data.level || '未定级' }}</span>
+        <span class="hl-cap">{{ data.level ? 'TOPIK 等级' : '完成测试解锁' }}</span>
+      </button>
+    </header>
 
-    <!-- ===== AI 教练状态 ===== -->
-    <div v-if="!data.loading" class="coach-signal">
-      <div class="signal-orbit"><div class="signal-core"></div><div class="signal-ring signal-ring-a"></div><div class="signal-ring signal-ring-b"></div></div>
-      <div class="signal-copy">
-        <div class="signal-eyebrow">AI COACH · {{ data.goalDisplay || 'PERSONALIZED' }}</div>
-        <div class="signal-title">{{ data.coachHeadline }}</div>
-        <div class="signal-sub">{{ data.coachSubline }}</div>
+    <!-- ===== AI 教练状态带 ===== -->
+    <section v-if="!data.loading" class="coach rise rise-1">
+      <span class="coach-dot"></span>
+      <div class="coach-copy">
+        <div class="coach-eyebrow">AI COACH · {{ data.goalDisplay || 'PERSONALIZED' }}</div>
+        <div class="coach-title">{{ data.coachHeadline }}</div>
+        <div class="coach-sub">{{ data.coachSubline }}</div>
       </div>
-      <div class="signal-live">LIVE</div>
-    </div>
+      <span class="coach-live">LIVE</span>
+    </section>
 
     <!-- ===== 加载骨架 / 失败重试 ===== -->
     <template v-if="data.loading">
-      <div class="card skeleton-card">
+      <div class="card">
         <div class="sk-line sk-line-lg"></div>
         <div class="sk-line"></div>
         <div class="sk-line sk-line-sm"></div>
       </div>
-      <div class="card skeleton-card">
+      <div class="card">
         <div class="sk-line"></div>
         <div class="sk-line sk-line-sm"></div>
       </div>
     </template>
 
     <div v-else-if="data.loadFailed" class="card error-card">
-      <div class="err-emoji">🛰️</div>
       <div class="err-text">连接不到学习服务器</div>
-      <div class="err-sub">请确认后端已启动，或稍后再试</div>
-      <div class="btn-ghost" @click="onRetry">重新连接</div>
+      <div class="cap" style="margin: 6px 0 16px;">请确认后端已启动，或稍后再试</div>
+      <button class="btn btn-ghost btn-pill" @click="onRetry">重新连接</button>
     </div>
 
     <template v-else>
-      <!-- ===== 今日 AI 训练（核心卡） ===== -->
-      <div class="card today-card">
+      <!-- ===== 今日 AI 训练 ===== -->
+      <section class="card rise rise-2">
         <div class="card-head">
-          <div class="ch-title">
-            <span class="dot-row"><span class="dot dot-blue"></span><span class="dot dot-red"></span><span class="dot dot-ink"></span></span>
-            <span class="ch-name">今日 AI 训练</span>
-          </div>
-          <span class="ch-tag">AI 定制</span>
+          <span class="h-sec">今日 AI 训练</span>
+          <span class="tag tag-accent">AI 定制</span>
         </div>
 
-        <div class="today-focus">
+        <div class="focus">
           <div class="focus-kicker">{{ data.focusLabel }}</div>
           <div class="focus-value">{{ data.focusValue }}</div>
-          <div class="focus-note">{{ data.progressHint }}</div>
+          <div class="cap">{{ data.progressHint }}</div>
         </div>
 
-        <div class="goal-list">
-          <div v-if="data.streakDays > 0" class="goal-row">
-            <span class="goal-ico">🔥</span>
-            <span class="goal-k">连续学习</span>
-            <span class="goal-v">{{ data.streakDays }} 天</span>
+        <div class="rows">
+          <div v-if="data.streakDays > 0" class="row">
+            <span class="row-k">连续学习</span>
+            <span class="row-v num">{{ data.streakDays }} 天</span>
           </div>
-          <div v-if="data.weekMinutes > 0" class="goal-row">
-            <span class="goal-ico">⏱️</span>
-            <span class="goal-k">本周练习</span>
-            <span class="goal-v">{{ data.weekMinutes }} 分钟</span>
+          <div v-if="data.weekMinutes > 0" class="row">
+            <span class="row-k">本周练习</span>
+            <span class="row-v num">{{ data.weekMinutes }} 分钟</span>
           </div>
-          <div class="goal-row">
-            <span class="goal-ico">🎤</span>
-            <span class="goal-k">口语练习</span>
-            <span class="goal-v">目标 15 分钟</span>
+          <div class="row">
+            <span class="row-k">口语练习</span>
+            <span class="row-v">目标 15 分钟</span>
           </div>
-          <div class="goal-row">
-            <span class="goal-ico">📖</span>
-            <span class="goal-k">重点语法</span>
-            <span class="goal-v" :class="{ 'goal-v-pending': !data.weakPoints.length }">{{ data.weakPoints[0] || '对话后自动生成' }}</span>
+          <div class="row">
+            <span class="row-k">重点语法</span>
+            <span class="row-v" :class="{ 'is-pending': !data.weakPoints.length }">{{ data.weakPoints[0] || '对话后自动生成' }}</span>
           </div>
-          <div v-if="data.weakPoints.length > 1" class="goal-row">
-            <span class="goal-ico">🧠</span>
-            <span class="goal-k">薄弱点</span>
-            <span class="goal-v">{{ data.weakPoints[1] }}</span>
+          <div v-if="data.weakPoints.length > 1" class="row">
+            <span class="row-k">薄弱点</span>
+            <span class="row-v">{{ data.weakPoints[1] }}</span>
           </div>
-          <div v-if="data.dueVocab > 0" class="goal-row">
-            <span class="goal-ico">🔁</span>
-            <span class="goal-k">到期复习</span>
-            <span class="goal-v">{{ data.dueVocab }} 个生词</span>
+          <div v-if="data.dueVocab > 0" class="row">
+            <span class="row-k">到期复习</span>
+            <span class="row-v num">{{ data.dueVocab }} 个生词</span>
           </div>
         </div>
 
-        <div class="start-btn" @click="onStartToday">
-          <span>시작 开始今日训练</span>
+        <button class="start-btn" @click="onStartToday">
+          시작 · 开始今日训练
           <span class="start-arrow">→</span>
-        </div>
-      </div>
+        </button>
+      </section>
 
       <!-- ===== 我的韩语能力 ===== -->
-      <div class="card ability-card">
+      <section class="card rise rise-3">
         <div class="card-head">
-          <div class="ch-title"><span class="ch-name">我的韩语能力</span></div>
-          <span class="ch-tag ch-tag-plain">数据驱动 · 不虚构</span>
+          <span class="h-sec">我的韩语能力</span>
+          <span class="tag">数据驱动 · 不虚构</span>
         </div>
-        <div class="ability-caption">每个分数都来自真实对话、纠错或跟读记录</div>
+        <div class="cap" style="margin-top: 2px;">每个分数都来自真实对话、纠错或跟读记录</div>
 
-        <div class="ability-overall">
-          <div class="ao-main">
-            <span class="ao-num">{{ data.overall == null ? '—' : data.overall }}</span>
-            <span v-if="data.overall != null" class="ao-unit">/ 100</span>
-          </div>
-          <div class="ao-side">
-            <div class="ao-t1">{{ data.overall != null ? '综合评分' : '综合评分 · 待评估' }}</div>
-            <div class="ao-t2">{{ data.overall == null ? '完成测试与训练后解锁' : (data.overallBasis || '') }}</div>
+        <div class="overall">
+          <div class="overall-num num">{{ data.overall == null ? '—' : data.overall }}<span v-if="data.overall != null" class="overall-unit">/100</span></div>
+          <div class="overall-side">
+            <div class="overall-t">{{ data.overall != null ? '综合评分' : '综合评分 · 待评估' }}</div>
+            <div class="cap">{{ data.overall == null ? '完成测试与训练后解锁' : (data.overallBasis || '') }}</div>
           </div>
         </div>
 
-        <div class="dims">
-          <div v-for="d in data.dims" :key="d.key" class="dim-row">
-            <span class="dim-ico">{{ d.icon }}</span>
-            <span class="dim-label">{{ d.label }}</span>
-            <div class="dim-val" :class="d.hasScore ? 'dim-on' : 'pending'">
-              <span v-if="d.hasScore">{{ d.score }}<span class="dim-unit"> / 100</span></span>
-              <span v-else>待评估</span>
-            </div>
+        <div class="rows">
+          <div v-for="d in data.dims" :key="d.key" class="row">
+            <span class="row-k">{{ d.label }}</span>
+            <span v-if="d.hasScore" class="row-v dim-on num">{{ d.score }}<span class="dim-unit"> /100</span></span>
+            <span v-else class="row-v is-pending">待评估</span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- ===== 学习闭环叙事 ===== -->
-      <div class="card loop-card">
+      <!-- ===== 学习闭环 ===== -->
+      <section class="card rise rise-3">
         <div class="loop-title">AI 不陪你聊天，AI 陪你成长</div>
         <div class="loop-row">
-          <div class="loop-step"><div class="loop-ico">🔍</div><div class="loop-t">测试</div><div class="loop-s">发现水平</div></div>
-          <div class="loop-arrow">→</div>
-          <div class="loop-step"><div class="loop-ico">🧠</div><div class="loop-t">分析</div><div class="loop-s">定位薄弱点</div></div>
-          <div class="loop-arrow">→</div>
-          <div class="loop-step"><div class="loop-ico">🎯</div><div class="loop-t">训练</div><div class="loop-s">记忆错误</div></div>
-          <div class="loop-arrow">→</div>
-          <div class="loop-step"><div class="loop-ico">📈</div><div class="loop-t">进步</div><div class="loop-s">能力可视</div></div>
+          <div class="loop-step"><span class="loop-t">测试</span><span class="cap">发现水平</span></div>
+          <span class="loop-arrow">→</span>
+          <div class="loop-step"><span class="loop-t">分析</span><span class="cap">定位薄弱点</span></div>
+          <span class="loop-arrow">→</span>
+          <div class="loop-step"><span class="loop-t">训练</span><span class="cap">记忆错误</span></div>
+          <span class="loop-arrow">→</span>
+          <div class="loop-step"><span class="loop-t">进步</span><span class="cap">能力可视</span></div>
         </div>
-      </div>
+      </section>
 
-      <!-- ===== 最近纠错（有数据才显示） ===== -->
-      <div v-if="data.recentErrors.length" class="card">
+      <!-- ===== 最近纠错 ===== -->
+      <section v-if="data.recentErrors.length" class="card rise rise-4">
         <div class="card-head">
-          <div class="ch-title"><span class="ch-name">最近一次纠正</span></div>
-          <span class="ch-tag ch-tag-plain">自动记忆</span>
+          <span class="h-sec">最近一次纠正</span>
+          <span class="tag">自动记忆</span>
         </div>
         <div class="fix-row">
           <span class="fix-wrong">{{ data.recentErrors[0].wrong || '' }}</span>
           <span class="fix-arrow">→</span>
           <span class="fix-right">{{ data.recentErrors[0].right || '' }}</span>
         </div>
-        <div class="fix-note">{{ data.recentErrors[0].note || '' }}</div>
-      </div>
+        <div v-if="data.recentErrors[0].note" class="cap" style="margin-top: 6px;">{{ data.recentErrors[0].note }}</div>
+      </section>
     </template>
 
-    <!-- ===== 演示模式入口（预置剧本，无需 LLM；后端不可达时点击会得到明确提示） ===== -->
-    <div v-if="!data.loading" class="demo-entry" @click="onDemoEntry">
-      <span class="de-ico">🗂️</span>
-      <div class="de-txt">
-        <div class="de-t1">演示模式</div>
-        <div class="de-t2">3 分钟预置剧本 · 无需 AI 接口 · 数据与真实档案隔离</div>
-      </div>
+    <!-- ===== 演示模式入口 ===== -->
+    <button v-if="!data.loading" class="demo-entry rise rise-4" @click="onDemoEntry">
+      <span class="de-txt">
+        <span class="de-t1">演示模式</span>
+        <span class="de-t2">3 分钟预置剧本 · 无需 AI 接口 · 数据与真实档案隔离</span>
+      </span>
       <span class="de-arrow">→</span>
-    </div>
+    </button>
 
     <ConfirmModal
       :visible="demoVisible"
@@ -324,193 +303,188 @@ load();
 </template>
 
 <style scoped>
-.page { padding: 12px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
+.page { padding: 20px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
 
-/* ===== 顶部品牌区 ===== */
+/* ===== 顶部 ===== */
 .hero {
-  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin: 4px 4px 18px;
-  overflow: hidden;
+  margin: 0 0 18px;
 }
-.hero-left { flex: 1; min-width: 0; }
-.hero-title { font-size: 30px; font-weight: 800; letter-spacing: 0.5px; color: var(--c-ink); line-height: 1.2; }
-.hero-sub { margin-top: 7px; font-size: 12px; color: var(--c-mute); }
-.hero-level { display: flex; flex-direction: column; align-items: center; margin-left: 12px; padding-top: 3px; flex: none; cursor: pointer; }
+.hero-sub { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.hero-level {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  flex: none;
+}
 .hl-badge {
-  width: 50px; height: 50px;
+  min-width: 54px;
+  height: 54px;
+  padding: 0 8px;
   border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  border: 1px dashed #C7C7CC;
-  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-3);
+  border: 1px dashed var(--line-2);
+  background: var(--surface);
 }
-.hl-badge.hl-on { border: none; background: var(--c-sky-mist); box-shadow: var(--shadow-soft); }
-.hl-ko { font-size: 13px; font-weight: 700; color: var(--c-ink-soft); }
-.hl-on .hl-ko { color: var(--c-klein-deep); }
-.hl-cap { margin-top: 5px; font-size: 10px; color: var(--c-mute); }
-.hero-mark {
-  position: absolute; right: -6px; bottom: -23px;
-  font-size: 65px; font-weight: 800;
-  color: rgba(0, 113, 227, 0.05);
-  pointer-events: none; z-index: 0;
+.hl-badge.hl-on {
+  border: none;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
 }
+.hl-cap { font-size: 10px; color: var(--ink-3); }
 
-/* ===== AI 教练状态带 ===== */
-.coach-signal {
-  position: relative;
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 13px;
-  margin: -5px 0 14px;
-  background: #17243B;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  color: #F8FAFF;
+/* ===== 教练状态带：墨色卡片 + 呼吸点 ===== */
+.coach {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: var(--ink);
+  border-radius: var(--radius-l);
+  color: #F8F8F6;
 }
-.coach-signal::after {
-  content: "";
-  position: absolute; right: -40px; top: -60px;
-  width: 140px; height: 140px;
-  border: 1px solid rgba(118, 178, 255, 0.28);
+.coach-dot {
+  flex: none;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  transform: rotate(18deg);
+  background: #6FB5FF;
+  animation: breathe 2.2s ease-in-out infinite;
 }
-.signal-orbit { position: relative; width: 36px; height: 36px; flex: none; }
-.signal-core { position: absolute; left: 13px; top: 13px; width: 9px; height: 9px; border-radius: 50%; background: #F0C36A; box-shadow: 0 0 0 4px rgba(240,195,106,0.13); }
-.signal-ring { position: absolute; left: 4px; top: 4px; width: 28px; height: 28px; border: 1px solid rgba(119, 189, 255, 0.55); border-radius: 50%; }
-.signal-ring-a { animation: signal-breathe 2.4s ease-out infinite; }
-.signal-ring-b { left: 9px; top: 9px; width: 18px; height: 18px; border-color: rgba(240,195,106,0.42); animation: signal-breathe 2.4s ease-out 0.7s infinite; }
-@keyframes signal-breathe { 0%, 100% { transform: scale(0.82); opacity: 0.45; } 50% { transform: scale(1.12); opacity: 1; } }
-.signal-copy { position: relative; z-index: 1; flex: 1; min-width: 0; }
-.signal-eyebrow { font-size: 9px; letter-spacing: 1px; color: #9CB9DB; }
-.signal-title { margin-top: 3px; font-size: 14px; line-height: 1.35; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.signal-sub { margin-top: 2px; font-size: 10.5px; line-height: 1.4; color: #B6C5D8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.signal-live { position: relative; z-index: 1; padding: 2px 5px; border: 1px solid rgba(240,195,106,0.55); border-radius: 999px; color: #F0C36A; font-size: 8.5px; font-weight: 800; letter-spacing: 0.5px; }
-
-/* ===== 卡片 ===== */
-.card {
-  background: var(--c-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-soft);
-  padding: 20px;
-  margin-bottom: 16px;
-  animation: rise 0.35s ease-out both;
+@keyframes breathe {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 3px rgba(111, 181, 255, .18); }
+  50% { opacity: .55; box-shadow: 0 0 0 6px rgba(111, 181, 255, 0); }
 }
-@keyframes rise {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+.coach-copy { flex: 1; min-width: 0; }
+.coach-eyebrow { font-size: 10px; letter-spacing: .12em; color: #9BA3AF; }
+.coach-title { margin-top: 3px; font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coach-sub { margin-top: 2px; font-size: 11px; color: #B9BFC8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.coach-live {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: var(--radius-pill);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  color: #CFD6DE;
 }
 
-.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.ch-title { display: flex; align-items: center; }
-.ch-name { font-size: 15px; font-weight: 700; color: var(--c-ink); }
-.ch-tag {
-  font-size: 10px; font-weight: 600; color: var(--c-klein-deep);
-  background: var(--c-sky-mist); border-radius: var(--radius-pill); padding: 3px 9px;
+/* ===== 卡片头部 ===== */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
-.ch-tag-plain { background: #F2F2F7; color: var(--c-mute); }
 
-.dot-row { display: flex; align-items: center; margin-right: 8px; }
-.dot { width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; }
-.dot-blue { background: #0071E3; }
-.dot-red { background: #D64541; }
-.dot-ink { background: #1D1D1F; }
-
-/* ===== 今日训练卡 ===== */
-.today-focus {
-  margin-top: 11px; padding: 12px 13px;
-  border-left: 3px solid #D6A51F;
-  background: linear-gradient(90deg, #FFF8E8, #FFFCF4);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+/* ===== 今日重点 ===== */
+.focus {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 var(--radius-m) var(--radius-m) 0;
 }
-.focus-kicker { font-size: 10px; font-weight: 800; letter-spacing: 0.5px; color: #8A5B00; }
-.focus-value { margin-top: 4px; font-size: 17px; line-height: 1.25; font-weight: 900; color: var(--c-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.focus-note { margin-top: 3px; font-size: 10.5px; color: var(--c-mute); }
-.goal-list { margin-top: 10px; }
-.goal-row { display: flex; align-items: center; padding: 11px 0; border-bottom: 1px solid #F0F0F3; }
-.goal-row:last-child { border-bottom: none; }
-.goal-ico { font-size: 16px; margin-right: 11px; flex: none; }
-.goal-k { font-size: 13px; color: var(--c-mute); width: 75px; flex: none; }
-.goal-v { flex: 1; text-align: right; font-size: 14px; font-weight: 600; color: var(--c-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.goal-v-pending { color: var(--c-mute); font-weight: 400; }
+.focus-kicker { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--ink-3); }
+.focus-value { margin: 4px 0 2px; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ===== 数据行 ===== */
+.rows { margin-top: 8px; }
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.row:last-child { border-bottom: none; }
+.row-k { font-size: 13px; color: var(--ink-2); }
+.row-v { font-size: 14px; font-weight: 600; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; }
+.row-v.is-pending { color: var(--ink-3); font-weight: 400; }
+.dim-on { color: var(--accent-deep); }
+.dim-unit { font-size: 11px; color: var(--ink-3); font-weight: 400; }
+
+/* ===== 主按钮 ===== */
 .start-btn {
-  margin-top: 18px;
+  width: 100%;
+  margin-top: 16px;
   height: 48px;
   border-radius: var(--radius-pill);
-  background: #1D1D1F;
-  color: #FFFFFF;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 15px; font-weight: 600;
-  box-shadow: var(--shadow-lift);
-  transition: transform 0.18s ease-out, opacity 0.18s ease-out;
+  background: var(--ink);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: transform .15s ease, opacity .15s ease;
   cursor: pointer;
 }
-.start-btn:active { transform: scale(0.98); opacity: 0.92; }
-.start-arrow { margin-left: 8px; font-size: 16px; }
+.start-btn:active { transform: scale(0.98); opacity: .92; }
+.start-arrow { transition: transform .2s ease; }
+.start-btn:active .start-arrow { transform: translateX(3px); }
 
-/* ===== 能力卡 ===== */
-.ability-caption { margin-top: 1px; font-size: 10.5px; color: var(--c-mute); }
-.ability-overall {
-  display: flex; align-items: center;
-  background: #F7F8FA; border-radius: var(--radius-lg);
-  padding: 16px; margin-top: 11px;
+/* ===== 综合评分 ===== */
+.overall {
+  display: flex;
+  align-items: center;
+  background: var(--surface-2);
+  border-radius: var(--radius-m);
+  padding: 14px 16px;
+  margin: 12px 0 4px;
 }
-.ao-main { display: flex; align-items: baseline; flex: none; }
-.ao-num { font-size: 36px; font-weight: 800; color: var(--c-ink); line-height: 1; }
-.ao-unit { font-size: 12px; color: var(--c-mute); margin-left: 4px; }
-.ao-side { margin-left: 16px; }
-.ao-t1 { font-size: 15px; font-weight: 600; color: var(--c-ink); }
-.ao-t2 { margin-top: 4px; font-size: 11px; color: var(--c-mute); }
+.overall-num { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }
+.overall-unit { font-size: 12px; font-weight: 600; color: var(--ink-3); margin-left: 5px; }
+.overall-side { margin-left: 14px; min-width: 0; }
+.overall-t { font-size: 14px; font-weight: 600; }
 
-.dims { margin-top: 10px; }
-.dim-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #F0F0F3; }
-.dim-row:last-child { border-bottom: none; }
-.dim-ico { font-size: 16px; margin-right: 11px; }
-.dim-label { font-size: 14px; color: var(--c-ink); width: 75px; }
-.dim-val { flex: 1; text-align: right; font-size: 14px; font-weight: 600; color: var(--c-ink); }
-.dim-val.pending { color: var(--c-mute); font-weight: 400; font-size: 13px; }
-.dim-val.dim-on { color: var(--c-klein-deep); font-size: 16px; }
-.dim-unit { font-size: 11px; color: var(--c-mute); font-weight: 400; }
-
-/* ===== 学习闭环叙事 ===== */
-.loop-title { text-align: center; font-size: 14px; font-weight: 700; color: var(--c-ink); margin-bottom: 18px; }
+/* ===== 学习闭环 ===== */
+.loop-title { text-align: center; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 16px; }
 .loop-row { display: flex; align-items: flex-start; justify-content: space-between; }
-.loop-step { display: flex; flex-direction: column; align-items: center; flex: 1; }
-.loop-ico { font-size: 26px; }
-.loop-t { margin-top: 6px; font-size: 13px; font-weight: 700; color: var(--c-ink); }
-.loop-s { margin-top: 2px; font-size: 10px; color: var(--c-mute); }
-.loop-arrow { color: #C7C7CC; font-size: 14px; padding-top: 13px; flex: none; }
+.loop-step { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
+.loop-t { font-size: 13px; font-weight: 700; }
+.loop-arrow { color: var(--line-2); font-size: 13px; padding-top: 12px; flex: none; }
 
-/* ===== 最近纠错 ===== */
-.fix-row { display: flex; align-items: center; margin-top: 12px; flex-wrap: wrap; }
-.fix-wrong { font-size: 16px; font-weight: 700; color: var(--c-coral); text-decoration: line-through; }
-.fix-arrow { margin: 0 12px; color: var(--c-mute); font-size: 14px; }
-.fix-right { font-size: 16px; font-weight: 700; color: var(--c-mint); }
-.fix-note { margin-top: 8px; font-size: 12px; color: var(--c-mute); }
+/* ===== 纠错 ===== */
+.fix-row { display: flex; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.fix-wrong { font-size: 16px; font-weight: 700; color: var(--danger); text-decoration: line-through; }
+.fix-arrow { margin: 0 10px; color: var(--ink-3); }
+.fix-right { font-size: 16px; font-weight: 700; color: var(--ok); }
 
-/* ===== 加载骨架 / 失败态 ===== */
-.error-card { display: flex; flex-direction: column; align-items: center; padding: 32px 20px; }
-.err-emoji { font-size: 36px; }
-.err-text { margin-top: 10px; font-size: 15px; font-weight: 600; color: var(--c-ink); }
-.err-sub { margin: 6px 0 18px; font-size: 12px; color: var(--c-mute); }
+/* ===== 失败态 ===== */
+.error-card { display: flex; flex-direction: column; align-items: center; padding: 36px 20px; }
+.err-text { font-size: 15px; font-weight: 600; }
 
-/* ===== 演示模式入口 ===== */
+/* ===== 演示入口 ===== */
 .demo-entry {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 14px;
-  margin: 0 2px 16px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px dashed rgba(14, 24, 54, 0.18);
-  border-radius: var(--radius-lg);
-  transition: all 0.2s ease-out;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  margin-top: 14px;
+  background: transparent;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--radius-l);
   cursor: pointer;
+  text-align: left;
+  transition: background .18s ease;
 }
-.demo-entry:active { transform: scale(0.98); background: var(--c-sky-soft); }
-.de-ico { font-size: 17px; flex-shrink: 0; }
-.de-txt { flex: 1; min-width: 0; }
-.de-t1 { font-size: 13px; font-weight: 700; color: var(--c-ink); }
-.de-t2 { margin-top: 2px; font-size: 11px; color: var(--c-mute); }
-.de-arrow { font-size: 15px; color: var(--c-mute); flex-shrink: 0; }
+.demo-entry:active { background: var(--surface-2); }
+.de-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.de-t1 { font-size: 13px; font-weight: 700; color: var(--ink); }
+.de-t2 { font-size: 11px; color: var(--ink-3); }
+.de-arrow { color: var(--ink-3); flex-shrink: 0; }
 </style>

@@ -73,7 +73,10 @@ function sanitizeUid(uid) {
 }
 
 function userPath(uid) {
-  return path.join(DATA_DIR, uid + '.json');
+  // 以 root 为基准解析，再校验结果必须落在 users 目录内（root + sep 前缀），杜绝路径穿越
+  const p = path.resolve(DATA_DIR, uid + '.json');
+  if (!p.startsWith(DATA_DIR + path.sep)) throw new Error('invalid userId');
+  return p;
 }
 
 function loadUser(uid) {

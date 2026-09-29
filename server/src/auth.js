@@ -141,6 +141,10 @@ function register(req, res) {
 function login(req, res) {
   const { username, password } = req.body || {};
   const name = String(username || '').trim().toLowerCase();
+  // 登录与注册同规则校验用户名：白名单本身即杜绝了文件路径注入
+  if (!USERNAME_RE.test(name)) {
+    return res.status(401).json({ error: '用户名或密码错误' });
+  }
   const account = loadAccount(name);
   if (!account || !verifyPassword(String(password || ''), account.salt, account.hash)) {
     return res.status(401).json({ error: '用户名或密码错误' });

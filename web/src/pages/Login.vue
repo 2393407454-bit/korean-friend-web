@@ -58,18 +58,16 @@ async function submit() {
 
 <template>
   <div class="login-page">
-    <!-- 品牌区 -->
-    <div class="brand pop pop-1">
-      <div class="brand-dots"><span class="bd bd-blue"></span><span class="bd bd-red"></span><span class="bd bd-ink"></span></div>
+    <div class="brand rise rise-1">
+      <div class="brand-mark">한</div>
       <div class="brand-title">한국어 친구</div>
-      <div class="brand-sub">韩语伙伴 · AI 沉浸式口语教练</div>
+      <div class="brand-sub">韩语伙伴 · AI 口语教练</div>
     </div>
 
-    <!-- 登录/注册卡 -->
-    <div class="login-card pop pop-2">
+    <div class="login-card rise rise-2">
       <div class="mode-tabs">
-        <div class="mode-tab" :class="{ 'mode-on': mode === 'login' }" @click="switchMode('login')">登录</div>
-        <div class="mode-tab" :class="{ 'mode-on': mode === 'register' }" @click="switchMode('register')">注册</div>
+        <button class="mode-tab" :class="{ 'mode-on': mode === 'login' }" @click="switchMode('login')">登录</button>
+        <button class="mode-tab" :class="{ 'mode-on': mode === 'register' }" @click="switchMode('register')">注册</button>
       </div>
 
       <div class="field">
@@ -106,20 +104,20 @@ async function submit() {
         />
       </div>
 
-      <div v-if="error" class="login-error">⚠️ {{ error }}</div>
+      <div v-if="error" class="login-error">{{ error }}</div>
 
-      <button class="submit-btn" :class="{ 'submit-off': busy }" @click="submit">
+      <button class="submit-btn" :class="{ 'is-off': busy }" @click="submit">
         {{ busy ? '请稍候…' : (mode === 'register' ? '注册并开始学习' : '登录') }}
       </button>
 
       <div class="login-hint">
         {{ mode === 'register'
-          ? '注册后你的学习档案独立保存，与迷你程序账号互不相通'
-          : '还没有账号？点上方「注册」创建一个' }}
+          ? '注册后你的学习档案独立保存，与小程序账号互不相通'
+          : '还没有账号？切换到「注册」创建一个' }}
       </div>
     </div>
 
-    <div class="login-foot">오늘도 수고했어요 · 今天也加油</div>
+    <div class="login-foot rise rise-3">오늘도 수고했어요 · 今天也加油</div>
   </div>
 </template>
 
@@ -131,97 +129,98 @@ async function submit() {
   align-items: center;
   justify-content: center;
   padding: 32px 24px;
-  background:
-    radial-gradient(circle at 85% 8%, rgba(0, 113, 227, 0.08), transparent 45%),
-    radial-gradient(circle at 10% 90%, rgba(214, 69, 65, 0.06), transparent 45%),
-    #F5F5F7;
+  background: var(--bg);
 }
 
-.brand { text-align: center; margin-bottom: 30px; }
-.brand-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 14px; }
-.bd { width: 8px; height: 8px; border-radius: 50%; }
-.bd-blue { background: var(--c-klein); }
-.bd-red { background: var(--c-han-red); }
-.bd-ink { background: var(--c-ink); }
-.brand-title {
-  font-size: 38px;
-  font-weight: 900;
-  letter-spacing: 1px;
-  color: var(--c-ink);
-  line-height: 1.2;
+.brand { text-align: center; margin-bottom: 32px; }
+.brand-mark {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 15px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(11, 107, 232, 0.28);
 }
-.brand-sub { margin-top: 8px; font-size: 14px; color: var(--c-mute); letter-spacing: 2px; }
+.brand-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.brand-sub { margin-top: 6px; font-size: 13px; color: var(--ink-3); letter-spacing: 0.04em; }
 
 .login-card {
   width: 100%;
   max-width: 360px;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: var(--shadow-soft);
-  padding: 22px 22px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-card);
+  padding: 20px 20px 16px;
 }
 
 .mode-tabs {
   display: flex;
-  background: var(--c-cream);
-  border-radius: 999px;
-  padding: 4px;
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
+  padding: 3px;
   margin-bottom: 20px;
 }
 .mode-tab {
   flex: 1;
   text-align: center;
-  padding: 8px 0;
-  border-radius: 999px;
+  padding: 7px 0;
+  border-radius: var(--radius-pill);
   font-size: 14px;
-  font-weight: 700;
-  color: var(--c-mute);
+  font-weight: 600;
+  color: var(--ink-3);
   cursor: pointer;
-  transition: all 0.25s ease-out;
+  transition: all .2s ease;
 }
-.mode-on { background: var(--c-klein); color: #fff; box-shadow: 0 2px 8px rgba(0, 113, 227, 0.3); }
+.mode-on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(20,21,25,.10); }
 
 .field { margin-bottom: 14px; }
-.field-label { display: block; font-size: 12px; font-weight: 700; color: var(--c-ink-soft); margin-bottom: 6px; letter-spacing: 0.5px; }
-.field-input {
-  width: 100%;
-  border: 1.5px solid var(--c-border);
-  border-radius: 12px;
-  padding: 11px 14px;
-  font-size: 15px;
-  background: var(--c-paper);
-  transition: border 0.2s ease-out, box-shadow 0.2s ease-out;
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 6px;
 }
-.field-input:focus { border-color: var(--c-klein); box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12); }
 
 .login-error {
-  margin: 4px 0 10px;
+  margin: 2px 0 10px;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: #FFE9E8;
-  color: var(--c-coral);
+  border-radius: var(--radius-m);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: 13px;
   line-height: 1.5;
 }
 
 .submit-btn {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 6px;
   padding: 13px 0;
-  border-radius: 999px;
-  background: var(--c-klein);
+  border-radius: var(--radius-pill);
+  background: var(--ink);
   color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  box-shadow: 0 4px 14px rgba(0, 113, 227, 0.3);
-  transition: all 0.2s ease-out;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: all .18s ease;
   cursor: pointer;
 }
-.submit-btn:active { transform: scale(0.97); }
-.submit-off { opacity: 0.7; }
+.submit-btn:active { transform: scale(0.98); opacity: .92; }
+.submit-btn.is-off { opacity: .6; }
 
-.login-hint { margin-top: 12px; text-align: center; font-size: 12px; color: var(--c-mute); line-height: 1.5; }
+.login-hint { margin-top: 12px; text-align: center; font-size: 12px; color: var(--ink-3); line-height: 1.5; }
 
-.login-foot { margin-top: 28px; font-size: 12px; color: #B9BAC0; letter-spacing: 1px; }
+.login-foot { margin-top: 30px; font-size: 12px; color: #B9BAC0; letter-spacing: 0.06em; }
 </style>

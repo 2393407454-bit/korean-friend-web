@@ -64,6 +64,16 @@ function getNotice() {
 function pushToWecom(item) {
   const hook = process.env.WECOM_WEBHOOK;
   if (!hook) return;
+  // 仅允许推送企业微信官方域名：webhook 属运维配置，仍加白名单防配置被改后沦为 SSRF 跳板
+  try {
+    const u = new URL(hook);
+    if (u.protocol !== 'https:' || u.hostname !== 'qyapi.weixin.qq.com') {
+      console.warn('[feedback] WECOM_WEBHOOK 不是企业微信官方域名，已跳过推送');
+      return;
+    }
+  } catch (e) {
+    return;
+  }
   const payload = JSON.stringify({
     msgtype: 'markdown',
     markdown: {

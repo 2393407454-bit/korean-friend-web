@@ -1,7 +1,7 @@
 <script setup>
 // AI 对话主页面（自小程序 pages/chat 移植）：
 // 4 种模式 + 6 快捷话题 + 3 角色 + 情景对练 + SSE 打字机 + 语音输入 + TTS + 上传 + Demo 模式
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { get, post, uploadFile } from '../api/client';
 import { streamChat } from '../api/stream';
@@ -23,12 +23,12 @@ const MODES = [
 ];
 
 const TOPICS = [
-  { label: '💜 K-pop 追星', text: '我想聊 K-pop！用韩语教我几句应援话，带罗马音' },
-  { label: '📺 韩剧', text: '推荐一部适合初学者的韩剧，教我剧里的经典台词' },
-  { label: '✈️ 旅行问路', text: '我准备去韩国旅行，教我机场、地铁、问路的实用句子' },
-  { label: '🍲 美食点餐', text: '带我在韩国餐厅点餐！教我点餐用语（场景模拟）' },
-  { label: '📚 TOPIK 备考', text: '我在备考 TOPIK，讲一个常考语法点并出 2 道练习题' },
-  { label: '👋 日常问候', text: '教我韩国人日常打招呼的 5 种说法和使用场景' }
+  { label: 'K-pop 追星', text: '我想聊 K-pop！用韩语教我几句应援话，带罗马音' },
+  { label: '韩剧', text: '推荐一部适合初学者的韩剧，教我剧里的经典台词' },
+  { label: '旅行问路', text: '我准备去韩国旅行，教我机场、地铁、问路的实用句子' },
+  { label: '美食点餐', text: '带我在韩国餐厅点餐！教我点餐用语（场景模拟）' },
+  { label: 'TOPIK 备考', text: '我在备考 TOPIK，讲一个常考语法点并出 2 道练习题' },
+  { label: '日常问候', text: '教我韩国人日常打招呼的 5 种说法和使用场景' }
 ];
 
 const FALLBACK_CHARACTERS = [
@@ -136,7 +136,7 @@ onMounted(() => {
     loadHistory();
   }
 
-  // 名句页「💬 问 AI」/ 首页「开始今日训练」联动：读取一次性预填提问并自动发送
+  // 名句页「问 AI」/ 首页「开始今日训练」联动：读取一次性预填提问并自动发送
   const prefill = storeGet('kfp_chat_prefill');
   if (prefill) {
     storeRemove('kfp_chat_prefill');
@@ -329,7 +329,7 @@ function pushMessage(role, text, extra = {}) {
   return id;
 }
 
-// 朗读策略：不自动朗读——只有用户点「🔊 读」等按钮时才出声
+// 朗读策略：不自动朗读——只有用户点「朗读」按钮时才出声
 function pushAssistant(text, speech, silent) {
   pushMessage('assistant', text || '…', { speech });
 }
@@ -349,10 +349,6 @@ function removeMessage(id) {
 }
 
 /* ---------------- 发送（流式 + 打字机） ---------------- */
-function onInput(e) {
-  state.inputText = e.target.value;
-}
-
 function onSend() {
   const text = (state.inputText || '').trim();
   if (!text || state.status === 'typing' || state.recording) return;
@@ -529,7 +525,7 @@ async function onCopyTap(msg) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    showToast('已复制 ✨');
+    showToast('已复制');
   } catch (e) {
     showToast('复制失败，请长按文本手动复制');
   }
@@ -546,7 +542,7 @@ function onTtsToggle() {
   state.ttsEnabled = !state.ttsEnabled;
   storeSet('kfp_tts', state.ttsEnabled);
   if (!state.ttsEnabled) stopSpeak();
-  showToast(state.ttsEnabled ? '朗读开 🔊' : '朗读关 🔈', 800);
+  showToast(state.ttsEnabled ? '朗读开' : '朗读关', 800);
 }
 
 /* ---------------- 语音：按住说话（上限 30 秒，ASR 限制） ---------------- */
@@ -604,8 +600,6 @@ async function onVoiceEnd() {
 /* ---------------- 文件上传 ---------------- */
 function onUploadTap() {
   if (state.status === 'typing' || state.recording) return;
-  state.tipSheet = false;
-  // 简化为两个入口（对应 wx.chooseMedia / wx.chooseMessageFile）
   imgInput.value && imgInput.value.click();
 }
 
@@ -646,29 +640,29 @@ function doUpload(file, kind) {
 <template>
   <div class="chat-page">
     <!-- 公告横幅 -->
-    <div v-if="state.notice" class="notice-bar">
-      <div class="notice-body">
-        <span class="notice-tag">📢 公告</span>
-        <span class="notice-text">{{ state.notice.content }}</span>
-      </div>
-      <div class="notice-close" @click="onNoticeClose">✕</div>
+    <div v-if="state.notice" class="notice">
+      <span class="notice-tag">公告</span>
+      <span class="notice-text">{{ state.notice.content }}</span>
+      <button class="notice-close" @click="onNoticeClose">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
     </div>
 
     <!-- ===== 角色状态栏 ===== -->
-    <div class="statusbar stick">
-      <div class="sb-avatar" @click="state.charSheet = true">
+    <header class="statusbar">
+      <button class="sb-avatar" @click="state.charSheet = true">
         <span>{{ state.character.avatar }}</span>
         <span class="sb-avatar-hint">换</span>
-      </div>
+      </button>
       <div class="sb-main">
         <div class="sb-name">{{ state.character.name }}</div>
         <div class="sb-status">
-          <span class="status-dot" :class="{ 'dot-typing': state.status === 'typing' }"></span>
+          <span class="status-dot" :class="{ 'is-typing': state.status === 'typing' }"></span>
           <span>{{ state.character.tagline }} · {{ state.status === 'typing' ? '输入中…' : '在线倾听中' }}</span>
         </div>
       </div>
-      <div v-if="!state.demoMode" class="sb-new" @click="newSessionVisible = true">🔄 新对话</div>
-    </div>
+      <button v-if="!state.demoMode" class="sb-new" @click="newSessionVisible = true">新对话</button>
+    </header>
 
     <!-- 演示模式标识 -->
     <div v-if="state.demoMode" class="demo-mark">演示数据 · 预置剧本</div>
@@ -676,71 +670,68 @@ function doUpload(file, kind) {
     <!-- ===== 进行中的情景条 ===== -->
     <div v-if="state.currentScenario" class="sc-bar">
       <div class="sc-info">
-        <span class="sc-ico">{{ state.currentScenario.icon }}</span>
-        <div class="sc-txt">
-          <div class="sc-name">{{ state.currentScenario.name }} · {{ state.currentScenario.name_ko }}</div>
-          <div class="sc-role">你面对：{{ state.currentScenario.ai_role }}</div>
-        </div>
+        <span class="sc-name">{{ state.currentScenario.name }} · {{ state.currentScenario.name_ko }}</span>
+        <span class="sc-role">你面对：{{ state.currentScenario.ai_role }}</span>
       </div>
-      <div class="sc-end" :class="{ 'sc-end-off': state.scenarioEnding }" @click="onScenarioEnd">
+      <button class="sc-end" :class="{ 'is-off': state.scenarioEnding }" @click="onScenarioEnd">
         {{ state.scenarioEnding ? '复盘生成中…' : '结束复盘' }}
-      </div>
+      </button>
     </div>
 
     <!-- ===== 模式切换 ===== -->
     <div v-if="!state.demoMode" class="modes">
-      <div
+      <button
         v-for="m in MODES"
         :key="m.label"
         class="chip"
         :class="{ 'chip-on': state.currentMode === m.label }"
         @click="onModeTap(m)"
-      >{{ m.label }}</div>
+      >{{ m.label }}</button>
     </div>
 
     <!-- ===== 话题模板 ===== -->
     <div v-if="!state.demoMode" class="topics">
-      <div v-for="t in TOPICS" :key="t.label" class="topic-chip" @click="onTopicTap(t)">{{ t.label }}</div>
+      <button v-for="t in TOPICS" :key="t.label" class="topic-chip" @click="onTopicTap(t)">{{ t.label }}</button>
     </div>
 
     <!-- ===== 消息流 ===== -->
     <div ref="scroller" class="messages" @scroll="onMsgScroll">
       <div
-        v-for="(item, index) in state.messages"
+        v-for="item in state.messages"
         :key="item.id"
         class="bubble-row"
-        :class="[item.role, 'msg-pop']"
+        :class="item.role"
       >
-        <!-- 情景复盘评分卡（系统消息） -->
+        <!-- 情景复盘评分卡 -->
         <template v-if="item.role === 'sys'">
           <div class="rep-card">
             <div class="rep-head">
               <div class="rep-score-wrap">
-                <div class="rep-score">{{ item.report.score }}</div>
+                <div class="rep-score num">{{ item.report.score }}</div>
                 <div class="rep-score-cap">/ 100</div>
               </div>
               <div class="rep-title">
-                <div class="rep-t1">📋 {{ item.report.scene_name }} · 情景复盘</div>
+                <div class="rep-t1">{{ item.report.scene_name }} · 情景复盘</div>
                 <div v-if="item.report.summary" class="rep-t2">{{ item.report.summary }}</div>
               </div>
             </div>
             <div v-if="item.report.highlights && item.report.highlights.length" class="rep-sec">
-              <div class="rep-sec-t">✓ 做得好的</div>
-              <div v-for="(h, hi) in item.report.highlights" :key="hi" class="rep-li rep-li-good">{{ h }}</div>
+              <div class="rep-sec-t is-good">做得好的</div>
+              <div v-for="(h, hi) in item.report.highlights" :key="hi" class="rep-li">{{ h }}</div>
             </div>
             <div v-if="item.report.improvements && item.report.improvements.length" class="rep-sec">
-              <div class="rep-sec-t">⚠ 下次注意</div>
-              <div v-for="(im, ii) in item.report.improvements" :key="ii" class="rep-li rep-li-bad">{{ im }}</div>
+              <div class="rep-sec-t is-bad">下次注意</div>
+              <div v-for="(im, ii) in item.report.improvements" :key="ii" class="rep-li">{{ im }}</div>
             </div>
           </div>
         </template>
 
         <template v-else>
-          <div v-if="item.role === 'assistant'" class="ava ava-asst">{{ state.character.avatar }}</div>
+          <div v-if="item.role === 'assistant'" class="ava">{{ state.character.avatar }}</div>
 
-          <div class="bubble" :class="[item.role, { pending: item.pending }]">
+          <div class="bubble" :class="[item.role, { 'is-pending': item.pending }]">
             <!-- 等待首字 -->
-            <div v-if="item.pending" class="pending-inner">
+            <div v-if="item.pending" class="pending">
               <span class="pending-label">老师在想</span>
               <span class="dots"><span class="d"></span><span class="d"></span><span class="d"></span></span>
             </div>
@@ -758,12 +749,12 @@ function doUpload(file, kind) {
               </template>
 
               <!-- 结构化纠错卡 -->
-              <div v-if="item.errors && item.errors.length" class="err-cards">
+              <div v-if="item.errors && item.errors.length" class="cards-stack">
                 <div v-for="(err, ei) in item.errors" :key="ei" class="err-card">
                   <div class="ec-head">
-                    <span class="ec-type">✏️ {{ err.typeLabel }}</span>
+                    <span class="ec-type">{{ err.typeLabel }}</span>
                     <span v-if="err.point" class="ec-point">{{ err.point }}</span>
-                    <span v-if="err.severity === 'high'" class="ec-sev-high">易错</span>
+                    <span v-if="err.severity === 'high'" class="ec-sev">易错</span>
                   </div>
                   <div class="ec-line">
                     <span class="ec-wrong">{{ err.wrong }}</span>
@@ -775,26 +766,22 @@ function doUpload(file, kind) {
               </div>
 
               <!-- 掌握祝贺卡 -->
-              <div v-if="item.mastered && item.mastered.length" class="mas-cards">
+              <div v-if="item.mastered && item.mastered.length" class="cards-stack">
                 <div v-for="(m, mi) in item.mastered" :key="mi" class="mas-card">
-                  <div class="mas-title">🎉 已掌握「{{ m.point }}」的使用！</div>
-                  <div v-if="m.wrong" class="mas-line">
-                    <span class="mas-wrong">{{ m.wrong }}</span>
-                    <span class="mas-arrow">→</span>
-                    <span class="mas-right">{{ m.right }}</span>
+                  <div class="mas-title">已掌握「{{ m.point }}」的使用</div>
+                  <div v-if="m.wrong" class="ec-line">
+                    <span class="ec-wrong">{{ m.wrong }}</span>
+                    <span class="ec-arrow">→</span>
+                    <span class="ec-right">{{ m.right }}</span>
                   </div>
                 </div>
               </div>
 
               <!-- 操作条 -->
               <div v-if="item.role === 'assistant'" class="ops">
-                <span class="op tag tag-cream" @click="onSpeakTap(item)">🔊 读</span>
-                <span class="op tag tag-paper" @click="onCopyTap(item)">📋 复制</span>
-                <span
-                  v-if="item.korean && item.korean.length"
-                  class="op tag tag-mint"
-                  @click="onFollowTap(item)"
-                >🎤 跟读</span>
+                <button class="op" @click="onSpeakTap(item)">朗读</button>
+                <button class="op" @click="onCopyTap(item)">复制</button>
+                <button v-if="item.korean && item.korean.length" class="op op-accent" @click="onFollowTap(item)">跟读</button>
               </div>
             </template>
 
@@ -802,7 +789,7 @@ function doUpload(file, kind) {
             <template v-else>{{ item.text }}</template>
           </div>
 
-          <div v-if="item.role === 'user'" class="ava ava-user">🧑</div>
+          <div v-if="item.role === 'user'" class="ava ava-user">나</div>
         </template>
       </div>
 
@@ -812,40 +799,42 @@ function doUpload(file, kind) {
     <!-- ===== 录音浮层 ===== -->
     <div v-if="state.recording" class="rec-mask">
       <div class="rec-card">
-        <span class="rec-badge tag tag-coral">LIVE</span>
+        <span class="rec-badge">REC</span>
         <div class="wavebars">
           <span class="bar b1"></span><span class="bar b2"></span><span class="bar b3"></span><span class="bar b4"></span>
           <span class="bar b5"></span><span class="bar b6"></span><span class="bar b7"></span>
         </div>
         <div class="rec-hint">正在听你说韩语…</div>
-        <div class="rec-sub">已录 {{ state.recordTime }}s / 30s</div>
-        <div class="rec-stop" @click="onVoiceEnd">⏹ 结束并识别</div>
-        <div class="rec-tip">松开 🎤 或点上方按钮结束</div>
+        <div class="rec-sub num">{{ state.recordTime }}s / 30s</div>
+        <button class="rec-stop" @click="onVoiceEnd">结束并识别</button>
+        <div class="rec-tip">松开麦克风或点上方按钮结束</div>
       </div>
     </div>
 
-    <!-- ===== 情景选择面板（底部弹层） ===== -->
+    <!-- ===== 情景选择面板 ===== -->
     <div v-if="state.scenarioSheet" class="sheet-mask" @click="state.scenarioSheet = false"></div>
     <div class="sheet" :class="{ 'sheet-up': state.scenarioSheet }">
       <div class="sheet-head">
-        <span class="sheet-title">역할극 情景对练</span>
-        <span class="sheet-close" @click="state.scenarioSheet = false">✕</span>
+        <span class="sheet-title">역할극 · 情景对练</span>
+        <button class="sheet-close" @click="state.scenarioSheet = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
       </div>
       <div class="sheet-body">
-        <div class="sheet-hint">选择一个真实生活场景，AI 扮演其中的角色，陪你完成任务。</div>
+        <div class="cap" style="margin-bottom: 12px;">选择一个真实生活场景，AI 扮演其中的角色，陪你完成任务。</div>
         <div v-for="grp in state.scenarioGroups" :key="grp.cat" class="sc-cat">
           <div class="sc-cat-name">{{ grp.cat }}</div>
           <div class="sc-grid">
-            <div v-for="s in grp.items" :key="s.id" class="sc-item" @click="onScenarioTap(s)">
+            <button v-for="s in grp.items" :key="s.id" class="sc-item" @click="onScenarioTap(s)">
               <span class="si-ico">{{ s.icon }}</span>
-              <div class="si-info">
-                <div class="si-name">{{ s.name }}</div>
-                <div class="si-meta">
+              <span class="si-info">
+                <span class="si-name">{{ s.name }}</span>
+                <span class="si-meta">
                   <span class="si-ko">{{ s.name_ko }}</span>
                   <span class="si-level">{{ s.level }}</span>
-                </div>
-              </div>
-            </div>
+                </span>
+              </span>
+            </button>
           </div>
         </div>
       </div>
@@ -855,18 +844,20 @@ function doUpload(file, kind) {
     <div v-if="state.charSheet" class="sheet-mask" @click="state.charSheet = false"></div>
     <div class="sheet" :class="{ 'sheet-up': state.charSheet }">
       <div class="sheet-head">
-        <span class="sheet-title">선생님 选择老师</span>
-        <span class="sheet-close" @click="state.charSheet = false">✕</span>
+        <span class="sheet-title">선생님 · 选择老师</span>
+        <button class="sheet-close" @click="state.charSheet = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
       </div>
       <div class="sheet-body char-list">
-        <div v-for="c in state.characters" :key="c.id" class="char-item" @click="onCharacterPick(c)">
+        <button v-for="c in state.characters" :key="c.id" class="char-item" @click="onCharacterPick(c)">
           <span class="char-ava">{{ c.avatar }}</span>
-          <div class="char-info">
-            <div class="char-name">{{ c.name }}</div>
-            <div class="char-tag">{{ c.tagline }}</div>
-          </div>
+          <span class="char-info">
+            <span class="char-name">{{ c.name }}</span>
+            <span class="char-tag">{{ c.tagline }}</span>
+          </span>
           <span v-if="c.id === state.character.id" class="char-on">✓</span>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -874,48 +865,55 @@ function doUpload(file, kind) {
     <div v-if="state.tipSheet" class="sheet-mask" @click="state.tipSheet = false"></div>
     <div class="sheet" :class="{ 'sheet-up': state.tipSheet }">
       <div class="sheet-head">
-        <span class="sheet-title">빠른 시작 快捷提问</span>
-        <span class="sheet-close" @click="state.tipSheet = false">✕</span>
+        <span class="sheet-title">빠른 시작 · 快捷提问</span>
+        <button class="sheet-close" @click="state.tipSheet = false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
       </div>
       <div class="sheet-body">
-        <div v-for="t in QUICK_TIPS" :key="t.label" class="tip-item" @click="onQuickTip(t)">{{ t.label }}</div>
+        <button v-for="t in QUICK_TIPS" :key="t.label" class="tip-item" @click="onQuickTip(t)">{{ t.label }}</button>
       </div>
     </div>
 
     <!-- ===== Demo 控制条 ===== -->
     <div v-if="state.demoMode" class="demo-bar">
-      <div class="db-btn" @click="demoExitVisible = true">退出</div>
-      <div class="db-btn" @click="onDemoRestart">重置</div>
-      <div class="db-next" :class="{ 'db-next-off': state.demoBusy || state.demoFinished }" @click="onDemoNext">
+      <button class="db-btn" @click="demoExitVisible = true">退出</button>
+      <button class="db-btn" @click="onDemoRestart">重置</button>
+      <button class="db-next" :class="{ 'is-off': state.demoBusy || state.demoFinished }" @click="onDemoNext">
         {{ state.demoFinished ? '演示完成 ✓' : '下一步 →' }}
-      </div>
+      </button>
     </div>
 
     <!-- ===== 底部输入栏 ===== -->
     <div v-if="!state.demoMode" class="ibar">
-      <div class="ibtn" @click="onUploadTap">📎</div>
-      <div class="ibtn ibtn-doc" @click="onUploadDoc">📄</div>
+      <button class="ibtn" title="上传图片" @click="onUploadTap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.5v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h5l2 2.5h7a2 2 0 0 1 2 2z" transform="translate(0,-1.5)" /></svg>
+      </button>
+      <button class="ibtn" title="上传文档" @click="onUploadDoc">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" /><path d="M14 3v5h5M9 13h6M9 16.5h4" /></svg>
+      </button>
       <input
         class="ti"
         v-model="state.inputText"
         placeholder="한국어로 / 用中文或韩语输入"
-        confirm-type="send"
         @keyup.enter="onSend"
       />
-      <div
+      <button
         class="ibtn ibtn-mic"
-        :class="{ 'mic-on': state.recording }"
+        :class="{ 'is-on': state.recording }"
         @mousedown.prevent="onVoiceStart"
         @mouseup.prevent="onVoiceEnd"
         @mouseleave="state.recording && onVoiceEnd()"
         @touchstart.prevent="onVoiceStart"
         @touchend.prevent="onVoiceEnd"
-      >🎤</div>
-      <div class="ibtn ibtn-tts" :class="{ 'tts-on': state.ttsEnabled }" @click="onTtsToggle">
-        <span v-if="state.ttsEnabled">🔊</span>
-        <span v-else>🔈</span>
-      </div>
-      <div class="isend" :class="{ 'isend-off': !state.inputText }" @click="onSend">보내</div>
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5" /></svg>
+      </button>
+      <button class="ibtn ibtn-tts" :class="{ 'is-on': state.ttsEnabled }" @click="onTtsToggle">
+        <svg v-if="state.ttsEnabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5.5 6.5 9H3.5v6h3L11 18.5v-13Z" /><path d="M15 9.5a3.5 3.5 0 0 1 0 5M17.5 7a7 7 0 0 1 0 10" /></svg>
+        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5.5 6.5 9H3.5v6h3L11 18.5v-13Z" /><path d="M16 9.8a3.2 3.2 0 0 1 0 4.4M15 9.5l5 5m0-5-5 5" /></svg>
+      </button>
+      <button class="isend" :class="{ 'is-off': !state.inputText }" @click="onSend">보내기</button>
     </div>
 
     <!-- 隐藏文件选择 -->
@@ -948,391 +946,375 @@ function doUpload(file, kind) {
   overflow: hidden;
 }
 
-/* ===== 公告横幅 ===== */
-.notice-bar {
+/* ===== 公告 ===== */
+.notice {
   flex-shrink: 0;
-  margin: 8px 12px 0;
-  padding: 8px 10px;
-  background: linear-gradient(135deg, #FFF8E1 0%, #FFEFB8 100%);
-  border-radius: 8px;
-  box-shadow: 0 2px 7px rgba(255, 200, 50, 0.18);
   display: flex;
   align-items: flex-start;
-  gap: 7px;
-  animation: notice-slide 0.45s ease-out;
+  gap: 8px;
+  margin: 10px 14px 0;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-m);
 }
-@keyframes notice-slide {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+.notice-tag {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  color: var(--accent-deep);
+  padding-top: 2px;
 }
-.notice-body { flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.notice-tag { font-size: 10px; font-weight: 800; color: var(--c-klein-deep); letter-spacing: 0.3px; }
-.notice-text { font-size: 12px; color: var(--c-ink); line-height: 1.5; user-select: text; }
-.notice-close { flex-shrink: 0; font-size: 13px; color: var(--c-ink-soft); padding: 2px 4px; cursor: pointer; }
+.notice-text { flex: 1; font-size: 12.5px; color: var(--ink-2); line-height: 1.55; user-select: text; }
+.notice-close { flex: none; width: 20px; height: 20px; color: var(--ink-3); cursor: pointer; }
+.notice-close svg { width: 14px; height: 14px; }
 
 /* ===== 角色状态栏 ===== */
 .statusbar {
   flex-shrink: 0;
-  margin: 12px 12px 3px;
-  padding: 10px 12px;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
+  margin: 12px 14px 4px;
 }
 .sb-avatar {
   position: relative;
   width: 42px; height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep));
+  background: var(--accent-soft);
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px;
+  font-size: 21px;
   flex-shrink: 0;
   cursor: pointer;
-  box-shadow: 0 2px 7px rgba(0, 113, 227, 0.28);
 }
-.sb-avatar:active { transform: scale(0.92); }
+.sb-avatar:active { transform: scale(0.94); }
 .sb-avatar-hint {
-  position: absolute; right: -4px; bottom: -3px;
-  font-size: 9px;
-  background: var(--c-honey); color: var(--c-ink);
-  border-radius: 999px; padding: 1px 5px; font-weight: 700;
+  position: absolute; right: -2px; bottom: -2px;
+  font-size: 8px; font-weight: 700;
+  background: var(--ink); color: #fff;
+  border-radius: var(--radius-pill);
+  padding: 1px 5px;
+  border: 2px solid var(--bg);
 }
 .sb-main { flex: 1; min-width: 0; }
-.sb-name { font-size: 16px; font-weight: 900; color: var(--c-ink); letter-spacing: 0.3px; }
+.sb-name { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
 .sb-status {
   display: flex; align-items: center; gap: 5px;
-  margin-top: 3px;
-  font-size: 11px; font-weight: 600; color: var(--c-ink-soft);
+  margin-top: 2px;
+  font-size: 11px; color: var(--ink-3);
 }
-.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #22C55E; animation: dot-pulse 1.6s ease-in-out infinite; }
-.dot-typing { background: #E6C34A; }
-@keyframes dot-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.85); }
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #34B37A;
 }
+.status-dot.is-typing { background: var(--accent); animation: blink 1.2s ease-in-out infinite; }
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 .sb-new {
-  flex-shrink: 0;
-  font-size: 11px; font-weight: 700; color: var(--c-ink);
-  background: var(--c-cream); border-radius: 999px; padding: 5px 10px;
+  flex: none;
+  font-size: 12px; font-weight: 600;
+  color: var(--ink-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
   cursor: pointer;
+  background: var(--surface);
 }
-.sb-new:active { transform: scale(0.92); background: var(--c-honey); }
+.sb-new:active { background: var(--surface-2); }
 
 /* ===== 演示标识 ===== */
 .demo-mark {
   flex-shrink: 0;
   align-self: center;
-  margin: 0 12px 2px;
-  padding: 4px 12px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-  color: #8A5B00;
-  background: rgba(255, 196, 77, 0.18);
-  border: 1px solid rgba(255, 170, 23, 0.4);
-  border-radius: 999px;
+  margin: 4px 14px 2px;
+  padding: 3px 12px;
+  font-size: 11px; font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
 }
 
 /* ===== 情景条 ===== */
 .sc-bar {
   flex-shrink: 0;
-  display: flex; align-items: center; justify-content: space-between;
-  margin: 0 12px 8px;
-  padding: 10px 12px;
-  background: linear-gradient(135deg, #EAF3FF, #F2F6FC);
-  border: 1px solid #DCEDFF;
-  border-radius: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin: 6px 14px;
+  padding: 10px 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
 }
-.sc-info { display: flex; align-items: center; min-width: 0; flex: 1; }
-.sc-ico { font-size: 20px; margin-right: 8px; }
-.sc-txt { min-width: 0; }
-.sc-name { font-size: 13px; font-weight: 700; color: var(--c-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sc-role { margin-top: 2px; font-size: 10.5px; color: var(--c-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sc-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-role { font-size: 11px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-end {
-  flex: none; margin-left: 8px;
-  font-size: 11px; font-weight: 700; color: #fff;
-  background: var(--c-klein); border-radius: 999px; padding: 6px 12px;
+  flex: none;
+  font-size: 12px; font-weight: 600;
+  color: #fff; background: var(--ink);
+  border-radius: var(--radius-pill);
+  padding: 6px 13px;
   cursor: pointer;
 }
-.sc-end:active { transform: scale(0.95); }
-.sc-end-off { opacity: 0.55; }
+.sc-end.is-off { opacity: .55; }
 
 /* ===== 模式/话题 ===== */
 .modes, .topics {
   flex-shrink: 0;
-  white-space: nowrap;
+  display: flex;
+  gap: 7px;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 4px 12px 0;
+  padding: 5px 14px;
 }
 .modes::-webkit-scrollbar, .topics::-webkit-scrollbar { display: none; }
-
-.chip {
-  display: inline-block;
-  padding: 5px 11px;
-  margin-right: 6px;
-  border-radius: 999px;
-  background: var(--c-card);
-  color: var(--c-ink-soft);
-  font-size: 13px; font-weight: 700;
-  box-shadow: var(--shadow-sticker);
-  transition: all 0.25s ease-out;
-  cursor: pointer;
-  line-height: 1.2;
-}
-.chip-on { background: var(--c-klein); color: #fff; }
-.chip:active { transform: scale(0.94); }
-
+.topics { padding-top: 0; }
 .topic-chip {
-  display: inline-block;
+  flex: none;
   padding: 4px 11px;
-  margin-right: 6px;
-  border-radius: 8px;
-  background: var(--c-sky-soft);
-  border: 1px dashed rgba(0, 113, 227, 0.3);
-  color: var(--c-klein-deep);
-  font-size: 12px; font-weight: 600;
-  transition: all 0.25s ease-out;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
-.topic-chip:active { background: var(--c-klein); color: #fff; transform: scale(0.96); }
+.topic-chip:active { background: var(--surface-2); color: var(--ink-2); }
 
 /* ===== 消息流 ===== */
 .messages {
   flex: 1;
-  padding: 6px 12px;
+  padding: 6px 14px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 .bubble-row {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
-  margin: 7px 0;
+  gap: 7px;
+  margin: 12px 0;
 }
 .bubble-row.user { justify-content: flex-end; }
-.msg-pop { animation: msg-in 0.45s ease-out; animation-fill-mode: backwards; transform-origin: bottom center; }
-@keyframes msg-in {
-  0% { opacity: 0; transform: translateY(10px) scale(0.92); }
-  60% { opacity: 1; }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
-}
 
 .ava {
   width: 28px; height: 28px;
-  border-radius: 9px;
+  border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px;
+  font-size: 14px;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0, 113, 227, 0.25);
+  background: var(--accent-soft);
 }
-.ava-asst { background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep)); }
-.ava-user { background: linear-gradient(135deg, var(--c-mint), #2A8F77); }
+.ava-user {
+  background: var(--ink);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
 
 .bubble {
-  max-width: 72%;
-  padding: 10px 12px;
-  border-radius: 11px;
+  max-width: 76%;
+  padding: 10px 13px;
+  border-radius: 16px;
   line-height: 1.65;
   font-size: 14px;
   word-break: break-word;
-  color: var(--c-ink);
-  position: relative;
-  transition: transform 0.25s ease-out;
   white-space: pre-wrap;
 }
 .bubble.assistant {
-  background: var(--c-paper);
-  border-top-left-radius: 3px;
-  box-shadow: 0 2px 8px rgba(14, 24, 54, 0.06);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 5px;
+  box-shadow: 0 1px 2px rgba(20,21,25,.03);
 }
 .bubble.user {
-  background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep));
+  background: var(--accent);
   color: #fff;
-  border-top-right-radius: 3px;
-  box-shadow: 0 3px 9px rgba(0, 113, 227, 0.3);
+  border-bottom-right-radius: 5px;
 }
-.bubble.pending { background: var(--c-cream); overflow: hidden; }
+.bubble.is-pending { background: var(--surface-2); border: none; }
 
-.pending-inner { display: flex; align-items: center; gap: 6px; }
-.pending-label { font-size: 13px; font-weight: 700; color: var(--c-ink-soft); }
-.dots { display: inline-flex; gap: 5px; align-items: center; }
-.dots .d { display: block; width: 6px; height: 6px; border-radius: 50%; background: var(--c-klein); animation: dot-jump 1.1s ease-in-out infinite; }
-.dots .d:nth-child(2) { animation-delay: .15s; background: var(--c-sky-mist); }
-.dots .d:nth-child(3) { animation-delay: .3s; background: var(--c-coral); }
+.pending { display: flex; align-items: center; gap: 7px; }
+.pending-label { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+.dots { display: inline-flex; gap: 4px; }
+.dots .d { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); animation: dot-jump 1.1s ease-in-out infinite; }
+.dots .d:nth-child(2) { animation-delay: .15s; }
+.dots .d:nth-child(3) { animation-delay: .3s; }
 @keyframes dot-jump {
-  0%, 100% { transform: translateY(0) scale(0.85); opacity: 0.5; }
-  50% { transform: translateY(-4px) scale(1.25); opacity: 1; }
+  0%, 100% { transform: translateY(0); opacity: .4; }
+  50% { transform: translateY(-3px); opacity: 1; }
 }
 
 /* ===== 富文本 ===== */
 .line { min-height: 4px; white-space: pre-wrap; }
-.sg-b { font-weight: 800; }
+.sg-b { font-weight: 700; }
 .sg-c {
   font-family: Menlo, Consolas, monospace;
-  background: var(--c-sky-soft);
-  color: var(--c-klein-deep);
-  border-radius: 3px;
+  background: var(--surface-2);
+  border-radius: 4px;
   padding: 1px 4px;
   font-size: 13px;
 }
 .codeblock {
-  background: linear-gradient(135deg, #0F1530 0%, #1A2244 100%);
-  border-radius: 7px;
-  padding: 8px 9px;
-  margin: 5px 0;
+  background: #191A1E;
+  border-radius: var(--radius-m);
+  padding: 9px 11px;
+  margin: 6px 0;
   overflow-x: auto;
 }
-.cb-head { font-size: 10px; color: var(--c-sky-mist); letter-spacing: 0.5px; margin-bottom: 4px; opacity: 0.7; }
+.cb-head { font-size: 10px; color: #7C828D; letter-spacing: .08em; margin-bottom: 4px; }
 .cb-body {
   font-family: Menlo, Consolas, monospace;
   font-size: 12px;
-  color: #EAF2FF;
+  color: #E8EAEE;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
 }
-.sg-k { color: #7FD8F0; }
-.sg-str { color: #A5E7A0; }
-.sg-cm { color: #8A97B8; }
+.sg-k { color: #8FCBFF; }
+.sg-str { color: #A8E6A8; }
+.sg-cm { color: #7C828D; }
 
 /* ===== 操作条 ===== */
 .ops {
   display: flex; flex-wrap: wrap; gap: 6px;
-  margin-top: 7px;
-  padding-top: 6px;
-  border-top: 1px dashed rgba(14, 24, 54, 0.18);
-  animation: ops-in 0.4s ease-out 0.2s both;
+  margin-top: 8px;
 }
-@keyframes ops-in {
-  from { opacity: 0; transform: translateY(-3px); }
-  to { opacity: 1; transform: translateY(0); }
+.op {
+  padding: 3px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
 }
-.op { padding: 3px 9px; font-size: 11px; font-weight: 700; cursor: pointer; }
-.op:active { transform: scale(0.9); }
-.msg-end { height: 10px; }
+.op:active { background: var(--surface-2); }
+.op-accent { color: var(--accent-deep); border-color: rgba(11,107,232,.35); }
+.msg-end { height: 12px; }
 
 /* ===== 纠错卡 / 掌握卡 ===== */
-.err-cards { margin-top: 7px; display: flex; flex-direction: column; gap: 6px; }
+.cards-stack { margin-top: 8px; display: flex; flex-direction: column; gap: 7px; }
 .err-card {
-  background: #FFF7F6;
-  border: 1px solid #FFE7E4;
-  border-left: 3px solid var(--c-han-red);
-  border-radius: 8px;
-  padding: 8px 10px;
-  animation: ops-in 0.35s ease-out both;
+  background: var(--danger-soft);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-m);
+  padding: 9px 11px;
 }
-.ec-head { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.ec-type { font-size: 10px; font-weight: 700; color: #C0392B; background: #FFE9E8; padding: 1px 7px; border-radius: 999px; }
-.ec-point { font-size: 10px; font-weight: 600; color: var(--c-ink-soft); background: #fff; padding: 1px 7px; border-radius: 999px; }
-.ec-sev-high { font-size: 10px; font-weight: 700; color: #8A6D1A; background: #FFF6D9; padding: 1px 7px; border-radius: 999px; }
-.ec-line { margin-top: 5px; display: flex; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; line-height: 1.5; }
-.ec-wrong { color: var(--c-han-red); text-decoration: line-through; font-weight: 600; }
-.ec-arrow { margin: 0 6px; color: var(--c-mute); }
-.ec-right { color: #1E7A67; font-weight: 700; }
-.ec-explain { margin-top: 4px; font-size: 11px; color: var(--c-mute); line-height: 1.55; }
-
-.mas-cards { margin-top: 7px; display: flex; flex-direction: column; gap: 6px; }
 .mas-card {
-  background: #F0FAF6;
-  border: 1px solid #D8F0E7;
-  border-left: 3px solid var(--c-mint);
-  border-radius: 8px;
-  padding: 8px 10px;
-  animation: ops-in 0.35s ease-out both;
+  background: var(--ok-soft);
+  border-left: 3px solid var(--ok);
+  border-radius: var(--radius-m);
+  padding: 9px 11px;
 }
-.mas-title { font-size: 12px; font-weight: 700; color: #1E7A67; }
-.mas-line { margin-top: 4px; display: flex; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; line-height: 1.5; }
-.mas-wrong { color: var(--c-mute); text-decoration: line-through; }
-.mas-arrow { margin: 0 5px; color: var(--c-mute); }
-.mas-right { color: #1E7A67; font-weight: 700; }
+.ec-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ec-type {
+  font-size: 10px; font-weight: 700; color: var(--danger);
+  background: rgba(255,255,255,.7);
+  padding: 1px 7px; border-radius: var(--radius-pill);
+}
+.ec-point { font-size: 10px; font-weight: 600; color: var(--ink-2); background: rgba(255,255,255,.7); padding: 1px 7px; border-radius: var(--radius-pill); }
+.ec-sev { font-size: 10px; font-weight: 700; color: #8A6D1A; background: rgba(255,255,255,.7); padding: 1px 7px; border-radius: var(--radius-pill); }
+.ec-line { margin-top: 5px; display: flex; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; line-height: 1.5; }
+.ec-wrong { color: var(--danger); text-decoration: line-through; font-weight: 600; }
+.ec-arrow { margin: 0 6px; color: var(--ink-3); }
+.ec-right { color: var(--ok); font-weight: 700; }
+.ec-explain { margin-top: 4px; font-size: 11px; color: var(--ink-2); line-height: 1.55; }
+.mas-title { font-size: 12.5px; font-weight: 700; color: var(--ok); }
 
 /* ===== 复盘评分卡 ===== */
 .bubble-row.sys { justify-content: center; }
 .rep-card {
   width: 100%;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: var(--shadow-soft);
-  border: 1px solid #EEF0F4;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
   padding: 16px;
-  animation: msg-in 0.4s ease-out both;
+  box-shadow: var(--shadow-card);
 }
-.rep-head { display: flex; align-items: center; }
+.rep-head { display: flex; align-items: center; gap: 12px; }
 .rep-score-wrap {
-  flex: none; width: 64px; height: 64px;
+  flex: none; width: 60px; height: 60px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep));
+  background: var(--ink);
   color: #fff;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  box-shadow: 0 4px 10px rgba(0, 113, 227, 0.25);
 }
-.rep-score { font-size: 22px; font-weight: 800; line-height: 1; }
-.rep-score-cap { margin-top: 2px; font-size: 9px; opacity: 0.85; }
-.rep-title { margin-left: 12px; min-width: 0; }
-.rep-t1 { font-size: 14px; font-weight: 700; color: var(--c-ink); }
-.rep-t2 { margin-top: 4px; font-size: 11px; color: var(--c-mute); line-height: 1.5; }
+.rep-score { font-size: 21px; font-weight: 800; line-height: 1; }
+.rep-score-cap { font-size: 8.5px; opacity: .7; margin-top: 2px; }
+.rep-title { min-width: 0; }
+.rep-t1 { font-size: 14px; font-weight: 700; }
+.rep-t2 { margin-top: 3px; font-size: 11px; color: var(--ink-3); line-height: 1.5; }
 .rep-sec { margin-top: 12px; }
-.rep-sec-t { font-size: 11px; font-weight: 700; color: var(--c-ink-soft); margin-bottom: 5px; }
-.rep-li { font-size: 12px; line-height: 1.5; padding: 3px 0 3px 14px; position: relative; color: var(--c-ink-soft); }
-.rep-li::before { position: absolute; left: 2px; top: 3px; }
-.rep-li-good::before { content: "✓"; color: #1E7A67; font-weight: 700; }
-.rep-li-bad::before { content: "!"; color: #C0392B; font-weight: 700; }
+.rep-sec-t { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.rep-sec-t.is-good { color: var(--ok); }
+.rep-sec-t.is-bad { color: var(--danger); }
+.rep-li {
+  font-size: 12px; line-height: 1.55;
+  padding: 3px 0 3px 13px;
+  position: relative;
+  color: var(--ink-2);
+}
+.rep-li::before {
+  content: "";
+  position: absolute; left: 1px; top: 10px;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--line-2);
+}
 
 /* ===== 录音浮层 ===== */
 .rec-mask {
   position: fixed;
   inset: 0;
-  background: rgba(14, 24, 54, 0.55);
-  backdrop-filter: blur(5px);
+  background: rgba(20, 21, 25, 0.5);
+  backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   z-index: 99;
-  animation: mask-fade 0.25s ease;
 }
 .rec-card {
   position: relative;
-  background: var(--c-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lift);
-  padding: 20px 24px 16px;
-  display: flex; flex-direction: column; align-items: center; gap: 9px;
-  min-width: 240px;
-  animation: card-pop 0.4s ease-out;
+  background: var(--surface);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-pop);
+  padding: 22px 26px 18px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  min-width: 250px;
 }
 .rec-badge {
-  position: absolute; top: -9px; right: -6px;
-  transform: rotate(6deg);
-  background: var(--c-coral); color: #fff;
-  font-size: 11px; padding: 3px 10px;
-  box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.2);
-  animation: badge-pulse 1.5s ease-in-out infinite;
+  position: absolute; top: -9px; right: 14px;
+  font-size: 9px; font-weight: 800; letter-spacing: .1em;
+  background: var(--danger); color: #fff;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  animation: blink 1.4s ease-in-out infinite;
 }
-@keyframes badge-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 59, 48, 0.2); }
-  50% { box-shadow: 0 0 0 6px rgba(255, 59, 48, 0); }
-}
-.rec-hint { font-size: 14px; font-weight: 800; color: var(--c-ink); }
+.rec-hint { font-size: 14px; font-weight: 600; }
 .rec-sub {
-  font-size: 12px; font-weight: 700; color: var(--c-klein-deep);
-  background: var(--c-sky-soft); border-radius: 999px; padding: 3px 10px;
-  font-variant-numeric: tabular-nums;
+  font-size: 12px; font-weight: 600;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  padding: 3px 11px;
+  border-radius: var(--radius-pill);
 }
 .rec-stop {
   margin-top: 3px;
-  background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep));
-  color: #fff; font-size: 14px; font-weight: 800;
-  padding: 9px 24px; border-radius: 999px;
-  box-shadow: 0 3px 10px rgba(0, 113, 227, 0.3);
+  background: var(--ink);
+  color: #fff;
+  font-size: 14px; font-weight: 600;
+  padding: 9px 26px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
 }
-.rec-stop:active { transform: scale(0.94); }
-.rec-tip { font-size: 11px; color: var(--c-mute); }
+.rec-stop:active { transform: scale(0.96); }
+.rec-tip { font-size: 11px; color: var(--ink-3); }
 
 /* ===== 底部弹层 ===== */
 .sheet-mask {
   position: fixed;
   inset: 0;
-  background: rgba(14, 24, 54, 0.45);
+  background: rgba(20, 21, 25, 0.42);
+  backdrop-filter: blur(2px);
   z-index: 90;
-  animation: mask-fade 0.25s ease-out;
+  animation: fade .2s ease-out;
 }
 .sheet {
   position: fixed;
@@ -1340,171 +1322,168 @@ function doUpload(file, kind) {
   transform: translateX(-50%) translateY(100%);
   width: 100%;
   max-width: 480px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 20px 20px 0 0;
-  padding: 14px 16px calc(env(safe-area-inset-bottom) + 10px);
+  padding: 16px 16px calc(env(safe-area-inset-bottom) + 12px);
   max-height: 72dvh;
-  transition: transform 0.28s ease-out;
+  transition: transform .28s cubic-bezier(.22,.61,.36,1);
   z-index: 91;
   display: flex;
   flex-direction: column;
 }
 .sheet-up { transform: translateX(-50%) translateY(0); }
-.sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.sheet-title { font-size: 16px; font-weight: 800; color: var(--c-ink); }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sheet-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
 .sheet-close {
-  width: 26px; height: 26px;
+  width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; background: #F2F2F7; color: var(--c-mute);
-  font-size: 13px; cursor: pointer;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  cursor: pointer;
 }
+.sheet-close svg { width: 14px; height: 14px; }
 .sheet-body { flex: 1; min-height: 0; overflow-y: auto; }
-.sheet-hint { font-size: 11px; color: var(--c-mute); margin-bottom: 10px; }
-.sc-cat { margin-bottom: 12px; }
-.sc-cat-name { font-size: 11px; font-weight: 700; color: var(--c-mute); margin-bottom: 6px; letter-spacing: 0.5px; }
+.sc-cat { margin-bottom: 14px; }
+.sc-cat-name { font-size: 11px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; letter-spacing: .04em; }
 .sc-grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .sc-item {
   width: calc(50% - 4px);
-  display: flex; align-items: center;
-  padding: 10px;
-  background: #F7F8FA;
-  border: 1px solid #EEF0F4;
-  border-radius: 10px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
   cursor: pointer;
-  transition: transform 0.15s ease-out, background 0.15s ease-out;
+  text-align: left;
 }
-.sc-item:active { transform: scale(0.97); background: var(--c-sky-mist); }
-.si-ico { font-size: 20px; margin-right: 8px; flex: none; }
-.si-info { min-width: 0; }
-.si-name { font-size: 12.5px; font-weight: 700; color: var(--c-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.si-meta { margin-top: 2px; display: flex; align-items: center; gap: 5px; }
-.si-ko { font-size: 10px; color: var(--c-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.si-level { flex: none; font-size: 9px; color: var(--c-klein-deep); background: #EAF3FF; border-radius: 999px; padding: 1px 5px; }
+.sc-item:active { background: var(--surface-2); }
+.si-ico { font-size: 18px; flex: none; }
+.si-info { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.si-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.si-meta { display: flex; align-items: center; gap: 5px; }
+.si-ko { font-size: 10px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.si-level { flex: none; font-size: 9px; font-weight: 600; color: var(--accent-deep); background: var(--accent-soft); border-radius: var(--radius-pill); padding: 1px 6px; }
 
 .char-list { padding-bottom: 8px; }
 .char-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 10px;
-  border-bottom: 1px solid #F0F0F3;
+  display: flex; align-items: center; gap: 11px;
+  width: 100%;
+  padding: 12px 8px;
+  border-bottom: 1px solid var(--line);
   cursor: pointer;
+  text-align: left;
 }
 .char-item:last-child { border-bottom: none; }
-.char-item:active { background: var(--c-sky-soft); }
+.char-item:active { background: var(--bg); }
 .char-ava {
-  width: 42px; height: 42px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep));
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent-soft);
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px; flex: none;
+  font-size: 20px; flex: none;
 }
-.char-info { flex: 1; min-width: 0; }
-.char-name { font-size: 15px; font-weight: 700; color: var(--c-ink); }
-.char-tag { margin-top: 2px; font-size: 11px; color: var(--c-mute); }
-.char-on { color: var(--c-klein); font-weight: 800; }
+.char-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.char-name { font-size: 15px; font-weight: 600; }
+.char-tag { font-size: 11px; color: var(--ink-3); }
+.char-on { color: var(--accent); font-weight: 700; }
 
 .tip-item {
-  padding: 13px 10px;
-  border-bottom: 1px solid #F0F0F3;
-  font-size: 14px; font-weight: 600; color: var(--c-ink);
+  display: block;
+  width: 100%;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px; font-weight: 500;
   cursor: pointer;
+  text-align: left;
 }
 .tip-item:last-child { border-bottom: none; }
-.tip-item:active { background: var(--c-sky-soft); }
+.tip-item:active { background: var(--bg); }
 
 /* ===== Demo 控制条 ===== */
 .demo-bar {
   flex-shrink: 0;
-  display: flex; align-items: center; gap: 6px;
-  padding: 8px 10px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
   background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: saturate(180%) blur(10px);
-  border-top: 1px solid rgba(14, 24, 54, 0.06);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--line);
 }
 .db-btn {
-  flex-shrink: 0;
-  padding: 7px 13px;
-  font-size: 12px; font-weight: 700;
-  color: var(--c-klein-deep);
-  background: var(--c-cream);
-  border-radius: var(--radius-md);
+  flex: none;
+  padding: 8px 14px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-m);
   cursor: pointer;
 }
-.db-btn:active { transform: scale(0.94); background: var(--c-sky-mist); }
 .db-next {
   flex: 1;
   text-align: center;
-  padding: 8px 14px;
-  font-size: 13px; font-weight: 800;
+  padding: 9px 14px;
+  font-size: 13.5px; font-weight: 600;
   color: #fff;
-  background: linear-gradient(135deg, var(--c-han-red), #B0332F);
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 7px rgba(214, 69, 65, 0.3);
+  background: var(--danger);
+  border-radius: var(--radius-m);
   cursor: pointer;
 }
-.db-next:active { transform: scale(0.94); }
-.db-next-off { background: linear-gradient(135deg, #C8D2E8, #B7C2DD); box-shadow: none; opacity: 0.85; }
+.db-next.is-off { background: #C9CAC6; }
 
 /* ===== 底部输入栏 ===== */
 .ibar {
   flex-shrink: 0;
-  display: flex; align-items: center; gap: 5px;
-  padding: 8px 10px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 9px 10px;
   background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: saturate(180%) blur(10px);
-  -webkit-backdrop-filter: saturate(180%) blur(10px);
-  border-top: 1px solid rgba(14, 24, 54, 0.06);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-top: 1px solid var(--line);
 }
 .ibtn {
-  width: 34px; height: 34px;
-  border-radius: 10px;
-  background: var(--c-cream);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: transparent;
   display: flex; align-items: center; justify-content: center;
-  font-size: 17px;
+  color: var(--ink-3);
   flex-shrink: 0;
   cursor: pointer;
-  transition: all 0.2s ease-out;
-  user-select: none;
+  transition: all .18s ease;
+  touch-action: none;
 }
-.ibtn:active { transform: scale(0.88) rotate(-4deg); background: var(--c-sky-mist); }
-.ibtn-doc { font-size: 14px; }
-.ibtn-mic { background: var(--c-honey); touch-action: none; }
-.mic-on {
-  background: var(--c-coral);
-  animation: mic-pulse 1.4s ease-in-out infinite;
-}
+.ibtn svg { width: 19px; height: 19px; }
+.ibtn:active { background: var(--surface-2); color: var(--ink-2); }
+.ibtn-mic.is-on { background: var(--danger); color: #fff; animation: mic-pulse 1.4s ease-in-out infinite; }
+.ibtn-tts.is-on { color: var(--accent); }
 @keyframes mic-pulse {
   0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
+  50% { transform: scale(1.07); }
 }
-.ibtn-tts { background: var(--c-paper); }
-.tts-on { background: var(--c-mint); }
 
 .ti {
   flex: 1;
   min-width: 0;
-  background: var(--c-sky-soft);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 8px 9px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 9px 14px;
   font-size: 14px;
-  color: var(--c-ink);
+  color: var(--ink);
+  transition: all .18s ease;
 }
-.ti::placeholder { color: var(--c-mute); }
+.ti:focus { background: var(--surface); border-color: var(--line-2); }
+.ti::placeholder { color: var(--ink-3); }
 
 .isend {
   flex-shrink: 0;
-  background: linear-gradient(135deg, var(--c-klein), var(--c-klein-deep));
+  background: var(--accent);
   color: #fff;
-  font-size: 13px; font-weight: 800;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  box-shadow: 0 2px 7px rgba(0, 113, 227, 0.3);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 15px;
+  border-radius: var(--radius-pill);
   cursor: pointer;
-  user-select: none;
+  transition: all .18s ease;
 }
-.isend:active { transform: scale(0.94); }
-.isend-off {
-  background: linear-gradient(135deg, #C8D2E8, #B7C2DD);
-  box-shadow: none;
-  opacity: 0.85;
-}
+.isend:active { transform: scale(0.95); background: var(--accent-deep); }
+.isend.is-off { background: #C9CAC6; }
 </style>

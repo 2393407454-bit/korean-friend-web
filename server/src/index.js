@@ -26,8 +26,14 @@ app.post('/api/auth/register', auth.register);
 app.post('/api/auth/login', auth.login);
 app.get('/api/auth/me', auth.me);
 
-// 登录后端点统一取身份：令牌身份优先，防止伪造 userId
-const authed = (req) => req.authUserId || (req.body && req.body.userId) || '';
+// 登录后端点统一取身份：令牌身份优先，防止伪造 userId。
+// uid 白名单与 store.js 一致（仅字母/数字/下划线/连字符，不含点号，杜绝路径穿越）
+const UID_RE = /^[\w-]{1,64}$/;
+function safeUid(uid) {
+  const s = String(uid || '');
+  return UID_RE.test(s) ? s : '';
+}
+const authed = (req) => safeUid(req.authUserId || (req.body && req.body.userId) || '');
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -311,7 +317,7 @@ app.post('/api/song/vocab', (req, res) => {
 
 app.get('/api/song/list/:uid', (req, res) => {
   try {
-    res.json(agent.handleSongList(req.authUserId || req.params.uid));
+    res.json(agent.handleSongList(safeUid(req.authUserId || req.params.uid)));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -330,7 +336,7 @@ app.post('/api/song/delete', (req, res) => {
 
 app.get('/api/song/get/:uid/:songId', async (req, res) => {
   try {
-    res.json(await agent.handleSongGet(req.authUserId || req.params.uid, req.params.songId));
+    res.json(await agent.handleSongGet(safeUid(req.authUserId || req.params.uid), req.params.songId));
   } catch (e) {
     res.status(404).json({ error: e.message });
   }
@@ -389,13 +395,13 @@ app.post('/api/quotes/generate', async (req, res) => {
 });
 
 app.get('/api/profile/:uid', (req, res) => {
-  res.json(store.loadUser(req.authUserId || req.params.uid));
+  res.json(store.loadUser(safeUid(req.authUserId || req.params.uid)));
 });
 
 // 能力画像：数据驱动评分（缺证据维度为 null = 待评估）
 app.get('/api/abilities/:uid', (req, res) => {
   try {
-    res.json(agent.getAbilities(req.authUserId || req.params.uid));
+    res.json(agent.getAbilities(safeUid(req.authUserId || req.params.uid)));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -403,7 +409,7 @@ app.get('/api/abilities/:uid', (req, res) => {
 
 app.post('/api/profile/:uid/update', (req, res) => {
   try {
-    const uid = req.authUserId || req.params.uid;
+    const uid = safeUid(req.authUserId || req.params.uid);
     const doc = store.loadUser(uid);
     const { nickname } = req.body || {};
     if (typeof nickname === 'string') doc.profile.nickname = nickname.slice(0, 30);
@@ -431,7 +437,7 @@ app.use('/avatars', express.static(path.join(__dirname, '..', 'data', 'avatars')
 app.post('/api/profile/:uid/avatar', avatarUpload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required' });
-    const uid = req.authUserId || req.params.uid;
+    const uid = safeUid(req.authUserId || req.params.uid);
     const doc = store.loadUser(uid);
     const rel = '/avatars/' + req.file.filename;
     doc.profile.avatar = rel;
@@ -443,7 +449,7 @@ app.post('/api/profile/:uid/avatar', avatarUpload.single('file'), (req, res) => 
 });
 
 app.post('/api/profile/:uid/reset', (req, res) => {
-  res.json(store.resetUser(req.authUserId || req.params.uid));
+  res.json(store.resetUser(safeUid(req.authUserId || req.params.uid)));
 });
 
 // ===== 网页版静态托管（web/dist 构建产物，与 API 同源免 CORS）=====

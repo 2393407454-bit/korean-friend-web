@@ -1,0 +1,62 @@
+# ===== 密钥与私密配置（绝不上传）=====
+.env
+*.key
+
+# ===== 运行时数据 =====
+server/data/
+server/server.log
+*.log
+
+# ===== 依赖 =====
+node_modules/
+
+# ===== 系统文件 =====
+.DS_Store
+*/.DS_Store
+
+# ===== 本地工具产物 / 会话状态（不参与版本控制）=====
+.mimosa/
+server/.mimosa/
+.workbuddy-ai/
+*.continue.json
+.zcode/
+
+# ===== 系统文件 =====
+.DS_Store
+*/.DS_Store
+*.textClipping
+
+# ===== 微信开发者工具本地配置 =====
+project.private.config.json
+miniprogram/project.private.config.json
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+bower_components/
+jspm_packages/
+__pycache__/
+site-packages/
+venv/
+coverage/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）
