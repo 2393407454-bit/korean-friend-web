@@ -17,6 +17,24 @@ const auth = require('./auth');
 const app = express();
 app.use(express.json({ limit: '8mb' }));
 
+// ===== 跨域支持：网页版前端异源部署时需要（如 Cloudflare Workers/Pages 托管 dist）=====
+// .env 配 CORS_ORIGIN=https://korean-friend-web.xxx.workers.dev（多个用逗号分隔）；不配则不允许跨域
+const CORS_ALLOWED = String(process.env.CORS_ORIGIN || '')
+  .split(',').map((s) => s.trim()).filter(Boolean);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && CORS_ALLOWED.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  // 预检请求直接放行（必须先于鉴权中间件，否则浏览器预检会被 401 卡住）
+  if (req.method === 'OPTIONS') return res.status(204).end();
+  next();
+});
+
 // ===== 网页版登录门槛：/api/* 除 health/auth 外一律需要有效令牌 =====
 // AUTH_REQUIRED=false 时进入兼容模式（无令牌放行，供小程序联调），见 server/src/auth.js
 app.use('/api', auth.middleware);

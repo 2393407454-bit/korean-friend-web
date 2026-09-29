@@ -60,7 +60,11 @@ npm run dev        # 开发模式：http://localhost:5173，/api 自动代理到
 
 - 首次进入跳转 `/login`，注册一个账号（用户名 3-20 位字母/数字/下划线 + 密码 ≥6 位）即可使用；每个账号学习档案相互隔离
 - 令牌签名密钥 `AUTH_SECRET` 不配置时后端首次启动自动生成；`AUTH_REQUIRED=false` 可关闭 API 强制登录（小程序联调兼容模式）
-- 生产部署：`npm run build` 后 `web/dist` 由 Express 自动托管（同源，无需 CORS），浏览器直接访问 `http://localhost:3000`
+- 生产部署（前端上 Cloudflare、后端留在 Node 机器）：
+  1. `cd web && VITE_API_BASE=https://你的后端域名 npm run build`，把 `web/dist` 作为静态资产部署到 Cloudflare Workers/Pages（现有 Workers 部署即是）
+  2. 后端必须跑在**支持 Node 的机器**上（本机/云服务器/Railway 等）——`server/` 用了文件存储与 ffmpeg/edge-tts 子进程，**不能跑在 Cloudflare Workers 运行时**
+  3. 后端 `.env` 里配 `CORS_ORIGIN=https://你的前端.workers.dev` 放行跨域，并确保后端有公网可达的 HTTPS 地址（可用 cloudflared tunnel 内网穿透快速验证）
+  4. 只部署了前端而后端不可达时，页面会停在登录页且登录报错——这是预期行为
 
 ### 4. 导入小程序
 
