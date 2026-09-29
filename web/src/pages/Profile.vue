@@ -744,7 +744,7 @@ if (data.isAdmin) loadAdminMessages();
 </template>
 
 <style scoped>
-.page { padding: 20px 0 0; }
+.page { padding: 20px 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
 
 /* ===== 账号卡 ===== */
 .account-card { display: flex; align-items: center; gap: 13px; }

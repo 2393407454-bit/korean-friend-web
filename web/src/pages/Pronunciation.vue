@@ -367,7 +367,7 @@ if (practiceTarget) {
 </template>
 
 <style scoped>
-.page { padding: 20px 0 0; }
+.page { padding: 20px 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
 
 /* ===== 顶部 ===== */
 .hero {
