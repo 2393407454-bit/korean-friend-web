@@ -971,7 +971,7 @@ if (data.isAdmin) loadAdminMessages();
   border: 1px solid var(--line-2);
   border-radius: var(--radius-m);
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 16px; /* ≥16px：避免手机聚焦时自动放大 */
   line-height: 1.6;
   resize: vertical;
   background: var(--surface);

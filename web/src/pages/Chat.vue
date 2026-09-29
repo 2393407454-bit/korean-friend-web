@@ -1465,8 +1465,8 @@ function doUpload(file, kind) {
   background: var(--surface-2);
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  padding: 9px 14px;
-  font-size: 14px;
+  padding: 8px 14px;
+  font-size: 16px; /* ≥16px：避免手机浏览器聚焦输入时自动放大页面 */
   color: var(--ink);
   transition: all .18s ease;
 }

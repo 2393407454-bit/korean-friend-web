@@ -650,7 +650,7 @@ loadSongs();
   border: 1px solid var(--line-2);
   border-radius: var(--radius-m);
   padding: 11px 13px;
-  font-size: 13.5px;
+  font-size: 16px; /* ≥16px：避免手机聚焦时自动放大 */
   line-height: 1.6;
   resize: vertical;
   background: var(--surface);
@@ -684,7 +684,7 @@ loadSongs();
   margin-bottom: 8px;
 }
 .song-search svg { width: 15px; height: 15px; color: var(--ink-3); flex: none; }
-.song-search-input { flex: 1; border: none; background: none; font-size: 13px; }
+.song-search-input { flex: 1; border: none; background: none; font-size: 16px; }
 .song-row {
   display: flex; align-items: center; gap: 10px;
   width: 100%;
@@ -731,7 +731,7 @@ loadSongs();
   border-bottom: 1px solid var(--line);
 }
 .form-k { flex: none; font-size: 13px; font-weight: 600; color: var(--ink-2); width: 34px; }
-.form-v { flex: 1; border: none; font-size: 14px; background: none; padding: 4px 0; }
+.form-v { flex: 1; border: none; font-size: 16px; background: none; padding: 4px 0; }
 .song-summary {
   margin-top: 12px;
   padding: 10px 12px;
