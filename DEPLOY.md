@@ -279,3 +279,31 @@ const res = await wx.cloud.callContainer({
    - 时间充裕（> 3 周）→ 走方案二，**今天就提交备案**
    - 时间极紧 → 试方案三云托管，同时准备"用自己手机现场演示"的备选
 4. **代码已同步 GitHub**，这本身也是可提交的成果之一
+
+## 六、网页版（web/）云端部署：Mac 不开机也能访问
+
+> 适用场景：演示时间不定，后端需要 7×24 常驻。核心架构：
+> `评委浏览器 → Cloudflare（前端 Worker + 固定隧道域名）→ 你的服务器（Node 后端）`
+
+### 买什么（合计约 ¥60~150/年 或 服务器全免）
+
+| 项目 | 推荐 | 说明 |
+|---|---|---|
+| 服务器 | 腾讯云轻量 2C2G（活动价约 ¥50~112/年）或 Oracle Cloud 免费层（需外币卡，永久免费） | Ubuntu 22.04 起 |
+| 域名 | 任意便宜域名（.top/.xyz 首年 ¥10 内） | DNS 托管到 Cloudflare（免费）；**走 Cloudflare 隧道无需备案** |
+
+### 部署步骤（服务器到手后约 20 分钟）
+
+1. **后端**：把 `server/deploy/server-setup.sh` 传到服务器执行（私有仓库时带令牌
+   `REPO_URL=https://<token>@github.com/…`），然后在 `/opt/korean-server/server/.env`
+   填入 `LLM_API_KEY`（智谱 Key）并 `systemctl restart korean-server`
+2. **固定 HTTPS（免备案）**：域名接入 Cloudflare 后，在服务器上：
+   `cloudflared tunnel create korean-friend && cloudflared tunnel route dns korean-friend api.你的域名 && cloudflared tunnel run`，
+   最后把隧道做成 systemd 服务常驻（官方文档 5 分钟配置）
+3. **前端**：`cd web && VITE_API_BASE=https://api.你的域名 npm run build && npx wrangler deploy`
+   （Worker 名 korean-friend-web 已配好 `web/wrangler.jsonc`）
+4. **放行跨域**：服务器 `.env` 加 `CORS_ORIGIN=https://korean-friend-web.你的子域.workers.dev`
+
+### 本地开发/演示（现状，零成本）
+
+Mac 跑后端 + cloudflared 快速隧道，入口为 trycloudflare 地址；Mac 关机即下线。
