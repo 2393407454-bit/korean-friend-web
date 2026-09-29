@@ -19,6 +19,12 @@ node_modules/
 server/.mimosa/
 .workbuddy-ai/
 *.continue.json
+.zcode/
+
+# ===== 系统文件 =====
+.DS_Store
+*/.DS_Store
+*.textClipping
 
 # ===== 微信开发者工具本地配置 =====
 project.private.config.json

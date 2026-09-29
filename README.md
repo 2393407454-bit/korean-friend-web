@@ -1,9 +1,12 @@
-# 한국어 친구 · 韩语学习智能体（微信小程序版）
+# 한국어 친구 · 韩语学习智能体（网页版 + 微信小程序版）
 
 一个可以**语音交流、上传教材图片**的韩语学习智能体，对标多邻国/流利说的系统化教学 + 真人语伴式对话。完整教学法见 `korean-friend-agent/system-prompt.md` 与 `design.md`。
 
 ```
 korean-friend-app/
+├── web/                  # 网页版前端（Vue 3 + Vite，含登录页；构建后由 server 同源托管）
+│   ├── src/pages/        #   login / home / chat / pronunciation / song / quotes / profile
+│   └── src/api/          #   fetch 封装、SSE 流式、TTS 播放
 ├── miniprogram/          # 微信小程序前端（原生框架，微信开发者工具直接导入）
 │   ├── pages/chat/       #   对话页：文本/语音输入、TTS 播报、模式切换、文件上传
 │   ├── pages/pronunciation/  # 发音页：跟读练习 → ASR → AI 发音反馈 + 发音评分趋势
@@ -15,6 +18,7 @@ korean-friend-app/
         ├── system-prompt.js  # 教学法系统提示词（动态注入用户状态/复习队列/难度档位）
         ├── llm.js            # OpenAI 兼容多模态客户端（LLM/VLM/ASR/TTS）+ 演示模式
         ├── store.js          # 用户档案/生词本/SRS 复习/错误日志（JSON 存储）
+        ├── auth.js           # 网页版账号体系：注册/登录/令牌校验（HMAC，零依赖）
         └── security.js       # 微信 msgSecCheck 内容安全 + code2Session（上线用）
 ```
 
@@ -46,12 +50,25 @@ npm start
 
 > ⚠️ 未配置 ASR 时，聊天页语音输入不可用（会明确提示），文字交流不受影响。
 
-### 3. 导入小程序
+### 3. 跑网页版（含登录页）
+
+```bash
+cd web
+npm install
+npm run dev        # 开发模式：http://localhost:5173，/api 自动代理到 localhost:3000
+```
+
+- 首次进入跳转 `/login`，注册一个账号（用户名 3-20 位字母/数字/下划线 + 密码 ≥6 位）即可使用；每个账号学习档案相互隔离
+- 令牌签名密钥 `AUTH_SECRET` 不配置时后端首次启动自动生成；`AUTH_REQUIRED=false` 可关闭 API 强制登录（小程序联调兼容模式）
+- 生产部署：`npm run build` 后 `web/dist` 由 Express 自动托管（同源，无需 CORS），浏览器直接访问 `http://localhost:3000`
+
+### 4. 导入小程序
 
 1. 下载「微信开发者工具」，导入 `miniprogram/` 目录（测试号选 `touristappid`，或填自己的 AppID）
 2. 「详情 → 本地设置」勾选 **不校验合法域名**（开发期）
 3. 确认 `miniprogram/utils/config.js` 里 `BASE_URL` 指向你的后端地址（真机预览时改成电脑局域网 IP，如 `http://192.168.x.x:3000`）
 4. 编译运行。语音权限首次使用时授权即可
+5. ⚠️ 后端默认开启 API 登录校验（`AUTH_REQUIRED=true`），小程序没有网页令牌会被 401；联调小程序时请在 `server/.env` 设 `AUTH_REQUIRED=false` 重启
 
 ## 二、正式发布清单
 

@@ -12,9 +12,22 @@ const security = require('./security');
 const characters = require('./characters');
 const scenarios = require('./scenarios');
 const feedback = require('./feedback');
+const auth = require('./auth');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
+
+// ===== 网页版登录门槛：/api/* 除 health/auth 外一律需要有效令牌 =====
+// AUTH_REQUIRED=false 时进入兼容模式（无令牌放行，供小程序联调），见 server/src/auth.js
+app.use('/api', auth.middleware);
+
+// 网页版账号：注册 / 登录 / 令牌换身份
+app.post('/api/auth/register', auth.register);
+app.post('/api/auth/login', auth.login);
+app.get('/api/auth/me', auth.me);
+
+// 登录后端点统一取身份：令牌身份优先，防止伪造 userId
+const authed = (req) => req.authUserId || (req.body && req.body.userId) || '';
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -40,7 +53,8 @@ app.post('/api/session', async (req, res) => {
 
 app.post('/api/chat', async (req, res) => {
   try {
-    const { userId, text, channel, mode, frame_base64, characterId, scenarioId } = req.body || {};
+    const { text, channel, mode, frame_base64, characterId, scenarioId } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const out = await agent.handleChat({ userId, text: text || '', channel: channel || 'text', mode, frameBase64: frame_base64, characterId, scenarioId });
     res.json(out);
@@ -53,7 +67,8 @@ app.post('/api/chat', async (req, res) => {
 // 流式对话：SSE 帧 data: {"t":"增量"} … data: {"done":true,...}
 // 非 ASCII 全部 \u 转义，规避前端分块截断多字节字符的问题
 app.post('/api/chat/stream', async (req, res) => {
-  const { userId, text, channel, mode, characterId, scenarioId } = req.body || {};
+  const { text, channel, mode, characterId, scenarioId } = req.body || {};
+  const userId = authed(req);
   if (!userId || !text) return res.status(400).json({ error: 'userId/text required' });
 
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -61,12 +76,11 @@ app.post('/api/chat/stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const esc = (s) => JSON.stringify(s).replace(/[\u0080-\uFFFF]/g, (m) => '\\u' + m.charCodeAt(0).toString(16).padStart(4, '0'));
+  // 整帧一次 JSON.stringify（天然转义引号/换行）后再把非 ASCII \u 转义，
+  // 输出恒为合法 JSON 文本帧，避免任何手工拼接造成的注入面。
+  const escapeSseFrame = (obj) => 'data: ' + JSON.stringify(obj).replace(/[\u0080-\uFFFF]/g, (m) => '\\u' + m.charCodeAt(0).toString(16).padStart(4, '0')) + '\n\n';
   const send = (obj) => {
-    const body = Object.keys(obj)
-      .map((k) => '"' + k + '":' + (typeof obj[k] === 'string' ? esc(obj[k]) : JSON.stringify(obj[k] ?? null)))
-      .join(',');
-    res.write('data: {' + body + '}\n\n');
+    res.write(escapeSseFrame(obj));
   };
 
   try {
@@ -94,7 +108,7 @@ app.get('/api/scenarios', (req, res) => {
 // 结束情景并生成复盘
 app.post('/api/scenario/end', async (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     res.json(await agent.handleScenarioEnd({ userId }));
   } catch (e) {
@@ -106,7 +120,7 @@ app.post('/api/scenario/end', async (req, res) => {
 // 结构化学习报告（数据引擎 + AI 评语可选增强）
 app.post('/api/report', async (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     res.json(await agent.handleReport({ userId }));
   } catch (e) {
@@ -118,7 +132,7 @@ app.post('/api/report', async (req, res) => {
 // —— Demo 模式（Phase 12）：预置剧本，比赛现场零网络风险 ——
 app.post('/api/demo/next', (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     res.json(agent.handleDemoNext({ userId }));
   } catch (e) {
@@ -129,7 +143,7 @@ app.post('/api/demo/next', (req, res) => {
 
 app.post('/api/demo/reset', (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     res.json(agent.handleDemoReset({ userId }));
   } catch (e) {
@@ -140,7 +154,7 @@ app.post('/api/demo/reset', (req, res) => {
 
 app.post('/api/session/new', async (req, res) => {
   try {
-    const { userId } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     res.json(agent.archiveSession(userId));
   } catch (e) {
@@ -175,7 +189,7 @@ app.post('/api/tts', async (req, res) => {
 app.post('/api/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required' });
-    const userId = req.body.userId;
+    const userId = req.authUserId || req.body.userId;
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const out = await agent.handleUpload({ userId, file: req.file, mode: req.body.mode });
     res.json(out);
@@ -190,7 +204,7 @@ app.post('/api/pronounce', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'audio file required' });
     const target = (req.body && req.body.target) || '';
     if (!target) return res.status(400).json({ error: 'target required' });
-    const out = await agent.handlePronounce({ target, audioPath: req.file.path, userId: (req.body && req.body.userId) || '' });
+    const out = await agent.handlePronounce({ target, audioPath: req.file.path, userId: req.authUserId || (req.body && req.body.userId) || '' });
     res.json(out);
   } catch (e) {
     console.error('[pronounce]', e.message);
@@ -202,9 +216,9 @@ app.post('/api/pronounce', upload.single('file'), async (req, res) => {
 
 app.post('/api/pronounce/lessons', async (req, res) => {
   try {
-    const { userId, refresh } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
-    const out = await agent.handleLessons({ userId, refresh: !!refresh });
+    const out = await agent.handleLessons({ userId, refresh: !!req.body.refresh });
     res.json(out);
   } catch (e) {
     console.error('[lessons]', e.message);
@@ -215,7 +229,8 @@ app.post('/api/pronounce/lessons', async (req, res) => {
 // 「我会了」持久化（Phase 9）
 app.post('/api/pronounce/mastered', (req, res) => {
   try {
-    const { userId, target } = req.body || {};
+    const { target } = req.body || {};
+    const userId = authed(req);
     if (!userId || !target) return res.status(400).json({ error: 'userId/target required' });
     res.json(agent.markPronMastered(userId, target));
   } catch (e) {
@@ -274,7 +289,10 @@ app.post('/api/song/analyze', upload.single('file'), async (req, res) => {
 
 app.post('/api/song/save', (req, res) => {
   try {
-    res.json(agent.handleSongSave(req.body || {}));
+    const { title, artist, summary, lines } = req.body || {};
+    const userId = authed(req);
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.json(agent.handleSongSave({ userId, title, artist, summary, lines }));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -282,7 +300,10 @@ app.post('/api/song/save', (req, res) => {
 
 app.post('/api/song/vocab', (req, res) => {
   try {
-    res.json(agent.handleSongVocab(req.body || {}));
+    const { ko, zh } = req.body || {};
+    const userId = authed(req);
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    res.json(agent.handleSongVocab({ userId, ko, zh }));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
@@ -290,7 +311,7 @@ app.post('/api/song/vocab', (req, res) => {
 
 app.get('/api/song/list/:uid', (req, res) => {
   try {
-    res.json(agent.handleSongList(req.params.uid));
+    res.json(agent.handleSongList(req.authUserId || req.params.uid));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -298,7 +319,8 @@ app.get('/api/song/list/:uid', (req, res) => {
 
 app.post('/api/song/delete', (req, res) => {
   try {
-    const { userId, songId } = req.body || {};
+    const { songId } = req.body || {};
+    const userId = authed(req);
     if (!userId || !songId) return res.status(400).json({ error: 'userId/songId required' });
     res.json(agent.handleSongDelete(userId, songId));
   } catch (e) {
@@ -308,7 +330,7 @@ app.post('/api/song/delete', (req, res) => {
 
 app.get('/api/song/get/:uid/:songId', async (req, res) => {
   try {
-    res.json(await agent.handleSongGet(req.params.uid, req.params.songId));
+    res.json(await agent.handleSongGet(req.authUserId || req.params.uid, req.params.songId));
   } catch (e) {
     res.status(404).json({ error: e.message });
   }
@@ -317,7 +339,8 @@ app.get('/api/song/get/:uid/:songId', async (req, res) => {
 // ===== 留言板：用户→开发者（仅管理员可见，推送企业微信）+ 开发者→用户（公告）=====
 app.post('/api/feedback', (req, res) => {
   try {
-    const { userId, nickname, content } = req.body || {};
+    const { nickname, content } = req.body || {};
+    const userId = authed(req);
     if (!content || !String(content).trim()) return res.status(400).json({ error: 'content required' });
     const item = feedback.addFeedback({ userId: userId || '', nickname, content: String(content).trim() });
     feedback.pushToWecom(item); // 配置了 WECOM_WEBHOOK 才会实际推送
@@ -354,7 +377,8 @@ app.post('/api/admin/clear-notice', (req, res) => {
 
 app.post('/api/quotes/generate', async (req, res) => {
   try {
-    const { userId, drama, theme, level, refresh } = req.body || {};
+    const { drama, theme, level, refresh } = req.body || {};
+    const userId = authed(req);
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const out = await agent.handleDramaQuotes({ userId, drama, theme, level, refresh: !!refresh });
     res.json(out);
@@ -365,13 +389,13 @@ app.post('/api/quotes/generate', async (req, res) => {
 });
 
 app.get('/api/profile/:uid', (req, res) => {
-  res.json(store.loadUser(req.params.uid));
+  res.json(store.loadUser(req.authUserId || req.params.uid));
 });
 
 // 能力画像：数据驱动评分（缺证据维度为 null = 待评估）
 app.get('/api/abilities/:uid', (req, res) => {
   try {
-    res.json(agent.getAbilities(req.params.uid));
+    res.json(agent.getAbilities(req.authUserId || req.params.uid));
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -379,7 +403,8 @@ app.get('/api/abilities/:uid', (req, res) => {
 
 app.post('/api/profile/:uid/update', (req, res) => {
   try {
-    const doc = store.loadUser(req.params.uid);
+    const uid = req.authUserId || req.params.uid;
+    const doc = store.loadUser(uid);
     const { nickname } = req.body || {};
     if (typeof nickname === 'string') doc.profile.nickname = nickname.slice(0, 30);
     store.saveUser(doc);
@@ -394,7 +419,7 @@ const avatarUpload = multer({
   storage: multer.diskStorage({
     destination: path.join(__dirname, '..', 'data', 'avatars'),
     filename: (req, file, cb) => {
-      const uid = (req.body && req.body.userId) || 'u';
+      const uid = req.authUserId || (req.body && req.body.userId) || 'u';
       const ext = (path.extname(file.originalname || '') || '.jpg').toLowerCase();
       cb(null, uid.replace(/[^\w-]/g, '') + ext);
     }
@@ -406,7 +431,8 @@ app.use('/avatars', express.static(path.join(__dirname, '..', 'data', 'avatars')
 app.post('/api/profile/:uid/avatar', avatarUpload.single('file'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'file required' });
-    const doc = store.loadUser(req.params.uid);
+    const uid = req.authUserId || req.params.uid;
+    const doc = store.loadUser(uid);
     const rel = '/avatars/' + req.file.filename;
     doc.profile.avatar = rel;
     store.saveUser(doc);
@@ -417,8 +443,16 @@ app.post('/api/profile/:uid/avatar', avatarUpload.single('file'), (req, res) => 
 });
 
 app.post('/api/profile/:uid/reset', (req, res) => {
-  res.json(store.resetUser(req.params.uid));
+  res.json(store.resetUser(req.authUserId || req.params.uid));
 });
+
+// ===== 网页版静态托管（web/dist 构建产物，与 API 同源免 CORS）=====
+// 存在才挂载；SPA 路由（/chat /quotes 等）回退到 index.html
+const WEB_DIST = path.join(__dirname, '..', '..', 'web', 'dist');
+if (fs.existsSync(WEB_DIST)) {
+  app.use(express.static(WEB_DIST));
+  app.get('*', (req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
+}
 
 app.use((err, req, res, next) => {
   console.error('[server]', err);
