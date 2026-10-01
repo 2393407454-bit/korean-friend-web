@@ -1,0 +1,56 @@
+{
+  "data": [
+    {
+      "id": "page-home",
+      "title": "悬浮导航 · 首页预览",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1790752800000,
+      "canvasData": {
+        "x": 0,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-c3ab01c7",
+          "measuredAt": 1790754866494
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/home.html",
+        "interactions": []
+      }
+    },
+    {
+      "id": "page-login",
+      "title": "登录页 · 视觉优化预览",
+      "type": "page",
+      "version": 1,
+      "createdAt": 1790754000000,
+      "canvasData": {
+        "x": 169,
+        "y": 0,
+        "group": 0,
+        "layoutSnapshot": {
+          "version": 1,
+          "contentHeight": 900,
+          "viewportWidth": 375,
+          "sourceHash": "fnv1a-4393ea3c",
+          "measuredAt": 1790754268738
+        }
+      },
+      "devMetadata": {
+        "htmlSrc": "pages/login.html",
+        "interactions": []
+      }
+    }
+  ],
+  "config": {
+    "autoLayout": true,
+    "deviceType": "mobile",
+    "projectName": "韩语伙伴 · 悬浮导航升级预览",
+    "visualEditorEnabled": true
+  }
+}

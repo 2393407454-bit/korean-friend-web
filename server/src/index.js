@@ -471,12 +471,15 @@ app.post('/api/profile/:uid/reset', (req, res) => {
 });
 
 // ===== 网页版静态托管（web/dist 构建产物，与 API 同源免 CORS）=====
-// 存在才挂载；SPA 路由（/chat /quotes 等）回退到 index.html
+// 始终注册中间件：dist 可能在后端启动后才构建完成，不能把“目录不存在”缓存成永久 404。
+// SPA 路由（/chat /quotes 等）仅在 index.html 已生成时回退，避免吞掉 API 404。
 const WEB_DIST = path.join(__dirname, '..', '..', 'web', 'dist');
-if (fs.existsSync(WEB_DIST)) {
-  app.use(express.static(WEB_DIST));
-  app.get('*', (req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
-}
+app.use(express.static(WEB_DIST));
+app.get('*', (req, res, next) => {
+  const indexFile = path.join(WEB_DIST, 'index.html');
+  if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
+  return next();
+});
 
 app.use((err, req, res, next) => {
   console.error('[server]', err);

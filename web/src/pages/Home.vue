@@ -18,7 +18,6 @@ const GOAL_TEXT = {
   hobby: '兴趣'
 };
 
-// 五维能力：由后端评分引擎（/api/abilities）写入真实分数；无证据时 score 为 null → 待评估
 const DIMS = [
   { key: 'vocabulary', label: '词汇', score: null, hasScore: false },
   { key: 'grammar', label: '语法', score: null, hasScore: false },
@@ -85,7 +84,6 @@ function load() {
   });
 }
 
-/* 能力画像：分数只来自后端数据驱动引擎，null → 待评估 */
 function loadAbilities() {
   get('/api/abilities/' + currentUid()).then((res) => {
     if (!res || !res.dims) return;
@@ -105,7 +103,6 @@ function loadAbilities() {
   }).catch(() => {});
 }
 
-/* 开始今日训练：进入对话页并自动预填训练指令（chat 页读取 kfp_chat_prefill 联动） */
 function onStartToday() {
   const wp = data.weakPoints;
   const prefill = wp.length
@@ -121,7 +118,6 @@ function onRetry() {
   load();
 }
 
-/* 演示模式入口：写入一次性进入标志，chat 页在挂载/激活时双路接管 */
 function onDemoEntry() {
   demoVisible.value = true;
 }
@@ -141,7 +137,7 @@ load();
     <!-- ===== 顶部：品牌 + 等级 ===== -->
     <header class="hero rise rise-1">
       <div class="hero-left">
-        <div class="h-page">오늘의 한국어</div>
+        <div class="h-page hero-title">오늘의 한국어</div>
         <div class="hero-sub">{{ dateLabel }} · AI 教练 Han 陪练中</div>
       </div>
       <button class="hero-level" @click="router.push('/profile')">
@@ -303,7 +299,7 @@ load();
 </template>
 
 <style scoped>
-.page { padding: 20px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
+.page { padding: 20px 16px calc(var(--tabbar-h) + var(--floatbar-offset) + env(safe-area-inset-bottom) + 16px); }
 
 /* ===== 顶部 ===== */
 .hero {
@@ -311,6 +307,12 @@ load();
   align-items: flex-start;
   justify-content: space-between;
   margin: 0 0 18px;
+}
+.hero-title {
+  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 .hero-sub { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 .hero-level {
@@ -320,7 +322,9 @@ load();
   gap: 5px;
   cursor: pointer;
   flex: none;
+  transition: transform 0.2s ease;
 }
+.hero-level:active { transform: scale(0.94); }
 .hl-badge {
   min-width: 54px;
   height: 54px;
@@ -334,24 +338,35 @@ load();
   color: var(--ink-3);
   border: 1px dashed var(--line-2);
   background: var(--surface);
+  transition: all 0.25s ease;
 }
 .hl-badge.hl-on {
   border: none;
-  background: var(--accent-soft);
+  background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent-soft) 60%, var(--surface)));
   color: var(--accent-deep);
+  box-shadow: 0 4px 14px rgba(11, 107, 232, 0.14);
 }
 .hl-cap { font-size: 10px; color: var(--ink-3); }
 
-/* ===== 教练状态带：墨色卡片 + 呼吸点 ===== */
+/* ===== 教练状态带 ===== */
 .coach {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 15px 16px;
   margin-bottom: 14px;
-  background: var(--ink);
+  background: linear-gradient(135deg, var(--ink) 0%, #1C1E25 100%);
   border-radius: var(--radius-l);
   color: #F8F8F6;
+  position: relative;
+  overflow: hidden;
+}
+.coach::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
 }
 .coach-dot {
   flex: none;
@@ -390,9 +405,9 @@ load();
 /* ===== 今日重点 ===== */
 .focus {
   margin: 12px 0 4px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-left: 3px solid var(--accent);
-  background: var(--surface-2);
+  background: linear-gradient(90deg, var(--accent-soft) 0%, var(--surface-2) 100%);
   border-radius: 0 var(--radius-m) var(--radius-m) 0;
 }
 .focus-kicker { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--ink-3); }
@@ -429,18 +444,33 @@ load();
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  transition: transform .15s ease, opacity .15s ease;
+  transition: transform .18s cubic-bezier(0.22, 0.61, 0.36, 1), opacity .18s ease, box-shadow .2s ease;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
-.start-btn:active { transform: scale(0.98); opacity: .92; }
+.start-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+.start-btn:active { transform: scale(0.97); opacity: .92; }
+.start-btn:hover::after { transform: translateX(100%); }
 .start-arrow { transition: transform .2s ease; }
-.start-btn:active .start-arrow { transform: translateX(3px); }
+.start-btn:hover .start-arrow,
+.start-btn:active .start-arrow { transform: translateX(4px); }
+@media (hover: hover) {
+  .start-btn:hover { box-shadow: 0 8px 24px rgba(20, 21, 25, 0.18); }
+}
 
 /* ===== 综合评分 ===== */
 .overall {
   display: flex;
   align-items: center;
-  background: var(--surface-2);
+  background: linear-gradient(135deg, var(--surface-2) 0%, color-mix(in srgb, var(--surface-2) 70%, var(--surface)) 100%);
   border-radius: var(--radius-m);
   padding: 14px 16px;
   margin: 12px 0 4px;
@@ -480,9 +510,12 @@ load();
   border-radius: var(--radius-l);
   cursor: pointer;
   text-align: left;
-  transition: background .18s ease;
+  transition: background .18s ease, border-color .18s ease;
 }
 .demo-entry:active { background: var(--surface-2); }
+@media (hover: hover) {
+  .demo-entry:hover { border-color: var(--line-2); background: var(--surface-2); }
+}
 .de-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .de-t1 { font-size: 13px; font-weight: 700; color: var(--ink); }
 .de-t2 { font-size: 11px; color: var(--ink-3); }

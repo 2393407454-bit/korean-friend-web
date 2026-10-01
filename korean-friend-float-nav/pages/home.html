@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>韩语伙伴 · 悬浮导航预览</title>
+    <style id="theme-vars">
+/*
+ * Korean Friend App — floating nav showcase tokens
+ * Style: Minimal, premium, Apple-inspired
+ */
+
+:root {
+  /* brand */
+  --brand-50: #e8f2ff;
+  --brand-100: #cfe5ff;
+  --brand-200: #9fcbff;
+  --brand-300: #66abff;
+  --brand-400: #2e8dff;
+  --brand-500: #007aff;
+  --brand-600: #0064d6;
+  --brand-700: #004fad;
+  --brand-800: #003b82;
+  --brand-900: #00275a;
+
+  /* background */
+  --background-50: #ffffff;
+  --background-100: #f7f7fa;
+  --background-200: #f2f2f7;
+  --background-300: #e5e5ea;
+  --background-400: #d1d1d6;
+  --background-500: #aeaeb2;
+  --background-600: #8e8e93;
+  --background-700: #3a3a3c;
+  --background-800: #1c1c1e;
+  --background-900: #000000;
+
+  /* text */
+  --text-50: #f5f5f7;
+  --text-100: #e3e3e8;
+  --text-200: #c7c7cc;
+  --text-300: #aeaeb2;
+  --text-400: #8e8e93;
+  --text-500: #6e6e73;
+  --text-600: #48484a;
+  --text-700: #3c3c43;
+  --text-800: #1d1d1f;
+  --text-900: #000000;
+
+  /* icon */
+  --icon-50: #f5f5f7;
+  --icon-100: #e5e5ea;
+  --icon-200: #d1d1d6;
+  --icon-300: #c7c7cc;
+  --icon-400: #aeaeb2;
+  --icon-500: #8e8e93;
+  --icon-600: #6e6e73;
+  --icon-700: #48484a;
+  --icon-800: #2c2c2e;
+  --icon-900: #1d1d1f;
+
+  /* semantic */
+  --background: var(--background-50);
+  --foreground: var(--text-800);
+  --card: var(--background-50);
+  --card-foreground: var(--text-800);
+  --popover: var(--background-50);
+  --popover-foreground: var(--text-900);
+
+  --primary: var(--brand-500);
+  --primary-foreground: var(--background-50);
+  --secondary: var(--background-200);
+  --secondary-foreground: var(--text-800);
+  --muted: var(--background-200);
+  --muted-foreground: var(--text-400);
+  --accent: var(--background-100);
+  --accent-foreground: var(--text-800);
+  --destructive: #ff3b30;
+  --destructive-foreground: #ffffff;
+  --success: #34c759;
+  --success-foreground: #ffffff;
+  --border: var(--background-300);
+  --input: var(--background-400);
+  --ring: var(--brand-500);
+
+  --icon: var(--icon-900);
+  --icon-muted: var(--icon-500);
+
+  /* radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* shadow */
+  --shadow-card: 0 1px 2px rgba(20, 21, 25, 0.04), 0 6px 20px rgba(20, 21, 25, 0.04);
+  --shadow-pop:  0 4px 12px rgba(20, 21, 25, 0.04), 0 16px 40px rgba(20, 21, 25, 0.05);
+  --shadow-float: 0 6px 24px rgba(20, 21, 25, 0.06), 0 20px 48px rgba(20, 21, 25, 0.08);
+
+  /* font */
+  --font: -apple-system, "PingFang SC", "SF Pro Text", "Noto Sans CJK KR", "Malgun Gothic", sans-serif;
+
+  /* compatibility aliases for the showcase page */
+  --ink: var(--text-800);
+  --ink-2: var(--text-500);
+  --ink-3: var(--text-400);
+  --bg: var(--background-100);
+  --surface: var(--background-50);
+  --surface-2: var(--background-200);
+  --line: var(--border);
+  --line-2: var(--input);
+  --accent: var(--primary);
+  --accent-soft: var(--brand-50);
+  --accent-deep: var(--brand-700);
+}
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --radius-sm: var(--radius-sm);
+    --radius-md: var(--radius-md);
+    --radius-lg: var(--radius-lg);
+  }
+  @layer base {
+    body { background: var(--background); color: var(--foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style id="semantic-token-fallback">
+      .bg-background { background-color: var(--background); }
+      .text-background { color: var(--background); }
+      .border-background { border-color: var(--background); }
+      .ring-background { --tw-ring-color: var(--background); }
+      .bg-foreground { background-color: var(--foreground); }
+      .text-foreground { color: var(--foreground); }
+      .border-foreground { border-color: var(--foreground); }
+      .ring-foreground { --tw-ring-color: var(--foreground); }
+      .bg-card { background-color: var(--card); }
+      .text-card { color: var(--card); }
+      .border-card { border-color: var(--card); }
+      .ring-card { --tw-ring-color: var(--card); }
+      .bg-card-foreground { background-color: var(--card-foreground); }
+      .text-card-foreground { color: var(--card-foreground); }
+      .border-card-foreground { border-color: var(--card-foreground); }
+      .ring-card-foreground { --tw-ring-color: var(--card-foreground); }
+      .bg-popover { background-color: var(--popover); }
+      .text-popover { color: var(--popover); }
+      .border-popover { border-color: var(--popover); }
+      .ring-popover { --tw-ring-color: var(--popover); }
+      .bg-popover-foreground { background-color: var(--popover-foreground); }
+      .text-popover-foreground { color: var(--popover-foreground); }
+      .border-popover-foreground { border-color: var(--popover-foreground); }
+      .ring-popover-foreground { --tw-ring-color: var(--popover-foreground); }
+      .bg-primary { background-color: var(--primary); }
+      .text-primary { color: var(--primary); }
+      .border-primary { border-color: var(--primary); }
+      .ring-primary { --tw-ring-color: var(--primary); }
+      .bg-primary-foreground { background-color: var(--primary-foreground); }
+      .text-primary-foreground { color: var(--primary-foreground); }
+      .border-primary-foreground { border-color: var(--primary-foreground); }
+      .ring-primary-foreground { --tw-ring-color: var(--primary-foreground); }
+      .bg-secondary { background-color: var(--secondary); }
+      .text-secondary { color: var(--secondary); }
+      .border-secondary { border-color: var(--secondary); }
+      .ring-secondary { --tw-ring-color: var(--secondary); }
+      .bg-secondary-foreground { background-color: var(--secondary-foreground); }
+      .text-secondary-foreground { color: var(--secondary-foreground); }
+      .border-secondary-foreground { border-color: var(--secondary-foreground); }
+      .ring-secondary-foreground { --tw-ring-color: var(--secondary-foreground); }
+      .bg-muted { background-color: var(--muted); }
+      .text-muted { color: var(--muted); }
+      .border-muted { border-color: var(--muted); }
+      .ring-muted { --tw-ring-color: var(--muted); }
+      .bg-muted-foreground { background-color: var(--muted-foreground); }
+      .text-muted-foreground { color: var(--muted-foreground); }
+      .border-muted-foreground { border-color: var(--muted-foreground); }
+      .ring-muted-foreground { --tw-ring-color: var(--muted-foreground); }
+      .bg-accent { background-color: var(--accent); }
+      .text-accent { color: var(--accent); }
+      .border-accent { border-color: var(--accent); }
+      .ring-accent { --tw-ring-color: var(--accent); }
+      .bg-accent-foreground { background-color: var(--accent-foreground); }
+      .text-accent-foreground { color: var(--accent-foreground); }
+      .border-accent-foreground { border-color: var(--accent-foreground); }
+      .ring-accent-foreground { --tw-ring-color: var(--accent-foreground); }
+      .bg-destructive { background-color: var(--destructive); }
+      .text-destructive { color: var(--destructive); }
+      .border-destructive { border-color: var(--destructive); }
+      .ring-destructive { --tw-ring-color: var(--destructive); }
+      .bg-destructive-foreground { background-color: var(--destructive-foreground); }
+      .text-destructive-foreground { color: var(--destructive-foreground); }
+      .border-destructive-foreground { border-color: var(--destructive-foreground); }
+      .ring-destructive-foreground { --tw-ring-color: var(--destructive-foreground); }
+      .bg-border { background-color: var(--border); }
+      .text-border { color: var(--border); }
+      .border-border { border-color: var(--border); }
+      .ring-border { --tw-ring-color: var(--border); }
+      .bg-input { background-color: var(--input); }
+      .text-input { color: var(--input); }
+      .border-input { border-color: var(--input); }
+      .ring-input { --tw-ring-color: var(--input); }
+      .bg-ring { background-color: var(--ring); }
+      .text-ring { color: var(--ring); }
+      .border-ring { border-color: var(--ring); }
+      .ring-ring { --tw-ring-color: var(--ring); }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      [data-icon] {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-position: center;
+        mask-position: center;
+        background-color: currentColor;
+      }
+    </style>
+</head>
+<body>
+  
+
+  <script>
+    const items = document.querySelectorAll('.tab-item');
+    const glider = document.getElementById('glider');
+    items.forEach((item) => {
+      item.addEventListener('click', () => {
+        items.forEach((i) => i.classList.remove('on'));
+        item.classList.add('on');
+        glider.style.transform = 'translateX(' + (item.dataset.index * 100) + '%)';
+      });
+    });
+  </script>
+
+    <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--background-200);
+      color: var(--ink);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.6;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .phone {
+      width: 100%;
+      max-width: 390px;
+      aspect-ratio: 9 / 19.5;
+      min-height: 600px;
+      background: var(--bg);
+      border-radius: 40px;
+      box-shadow: 0 24px 70px rgba(20,21,25,0.12);
+      position: relative;
+      border: 10px solid var(--surface);
+    }
+    .screen {
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      padding: 24px 18px 110px;
+    }
+    .screen::-webkit-scrollbar { display: none; }
+
+    .hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      animation: rise .45s cubic-bezier(.22,.61,.36,1) both;
+    }
+    .hero-left .title { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+    .hero-left .sub { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+    .level {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      cursor: pointer; transition: transform .2s ease;
+    }
+    .level:active { transform: scale(0.94); }
+    .level-badge {
+      width: 54px; height: 54px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      background: var(--accent-soft); color: var(--accent-deep);
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 14%, transparent);
+    }
+    .level-cap { font-size: 10px; color: var(--ink-3); }
+
+    .coach {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; margin-bottom: 14px;
+      background: var(--ink); border-radius: var(--radius-l); color: var(--surface);
+      animation: rise .45s .04s cubic-bezier(.22,.61,.36,1) both;
+    }
+    .coach-dot {
+      flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary);
+      animation: breathe 2.2s ease-in-out infinite;
+    }
+    @keyframes breathe {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+      50% { opacity: .55; box-shadow: 0 0 0 6px transparent; }
+    }
+    .coach-copy { flex: 1; min-width: 0; }
+    .coach-eyebrow { font-size: 10px; letter-spacing: .12em; color: var(--text-400); }
+    .coach-title { margin-top: 3px; font-size: 14px; font-weight: 700; }
+    .coach-sub { margin-top: 2px; font-size: 11px; color: var(--text-300); }
+    .coach-live {
+      flex: none; padding: 2px 8px; border: 1px solid rgba(255,255,255,0.28);
+      border-radius: var(--radius-pill); font-size: 9px; font-weight: 800; letter-spacing: .1em; color: var(--text-200);
+    }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius-l); box-shadow: var(--shadow-card);
+      padding: 18px; margin: 10px 0;
+      animation: rise .5s .08s cubic-bezier(.22,.61,.36,1) both;
+      transition: transform .25s cubic-bezier(.22,.61,.36,1), box-shadow .25s ease;
+    }
+    .card:hover { transform: translateY(-1px); box-shadow: var(--shadow-pop); }
+    .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .h-sec { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+    .tag {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: var(--radius-pill);
+      font-size: 11px; font-weight: 600; background: var(--surface-2); color: var(--ink-2);
+    }
+    .tag-accent { background: var(--accent-soft); color: var(--accent-deep); }
+    .cap { font-size: 12px; color: var(--ink-3); }
+
+    .focus {
+      margin: 12px 0 4px; padding: 12px 14px;
+      border-left: 3px solid var(--accent); background: var(--surface-2);
+      border-radius: 0 var(--radius-m) var(--radius-m) 0;
+    }
+    .focus-kicker { font-size: 10px; font-weight: 800; letter-spacing: .1em; color: var(--ink-3); }
+    .focus-value { margin: 4px 0 2px; font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+
+    .row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--line); }
+    .row:last-child { border-bottom: none; }
+    .row-k { font-size: 13px; color: var(--ink-2); }
+    .row-v { font-size: 14px; font-weight: 600; color: var(--ink); }
+
+    .start-btn {
+      width: 100%; margin-top: 16px; height: 48px; border-radius: var(--radius-pill);
+      background: var(--ink); color: var(--surface); display: flex; align-items: center; justify-content: center;
+      gap: 8px; font-size: 15px; font-weight: 600; letter-spacing: 0.02em;
+      transition: transform .18s ease, opacity .18s ease, box-shadow .2s ease;
+      cursor: pointer; position: relative; overflow: hidden; border: none;
+    }
+    .start-btn::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+      transform: translateX(-100%); transition: transform .5s ease;
+    }
+    .start-btn:hover::after { transform: translateX(100%); }
+    .start-btn:active { transform: scale(0.97); opacity: .92; }
+    .start-btn:hover { box-shadow: 0 8px 20px rgba(20,21,25,0.12); }
+    .start-arrow { transition: transform .2s ease; }
+    .start-btn:hover .start-arrow { transform: translateX(4px); }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== 悬浮胶囊导航 ===== */
+    .tabbar {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      display: flex;
+      justify-content: center;
+      padding: 6px;
+      border-radius: var(--radius-pill);
+      background: color-mix(in srgb, var(--surface) 82%, transparent);
+      border: 1px solid color-mix(in srgb, var(--foreground) 6%, transparent);
+      box-shadow: var(--shadow-float), inset 0 1px 0 color-mix(in srgb, var(--surface) 60%, transparent);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+    }
+    .tabbar-inner { position: relative; display: flex; align-items: center; gap: 4px; }
+    .tabbar-glider {
+      position: absolute;
+      top: 0; left: 0;
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      box-shadow: 0 2px 8px rgba(11, 107, 232, 0.12);
+      transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+      z-index: 0;
+    }
+    .tab-item {
+      position: relative; z-index: 1;
+      width: 48px; height: 48px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px;
+      color: var(--ink-3); border-radius: 50%;
+      transition: color 0.25s ease, transform 0.15s ease;
+      cursor: pointer; user-select: none;
+    }
+    .tab-item:active { transform: scale(0.92); }
+    .tab-item.on { color: var(--accent-deep); }
+    .tab-ico { width: 20px; height: 20px; flex-shrink: 0; transition: stroke-width 0.2s ease; }
+    .tab-item.on .tab-ico { stroke-width: 2; }
+    .tab-label {
+      font-size: 8.5px; font-weight: 700; letter-spacing: 0.02em; line-height: 1;
+      opacity: 0.7; transition: opacity 0.25s ease;
+    }
+    .tab-item.on .tab-label { opacity: 1; }
+  </style>
+<div class="phone" data-editor-id="editor-node-muntanzp-1">
+    <main class="screen">
+      <header class="hero">
+        <div class="hero-left">
+          <div class="title">오늘의 한국어</div>
+          <div class="sub">9월30日 · 周二 · AI 教练 Han 陪练中</div>
+        </div>
+        <div class="level">
+          <div class="level-badge">Level 2</div>
+          <div class="level-cap">TOPIK 等级</div>
+        </div>
+      </header>
+
+      <section class="coach">
+        <span class="coach-dot"></span>
+        <div class="coach-copy">
+          <div class="coach-eyebrow">AI COACH · PERSONALIZED</div>
+          <div class="coach-title">今天先把「아/어요 结尾」练顺</div>
+          <div class="coach-sub">AI 会把这个薄弱点带进下一轮对话</div>
+        </div>
+        <span class="coach-live">LIVE</span>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="h-sec">今日 AI 训练</span>
+          <span class="tag tag-accent">AI 定制</span>
+        </div>
+        <div class="focus">
+          <div class="focus-kicker">AI 发现的薄弱点</div>
+          <div class="focus-value">아/어요 结尾</div>
+          <div class="cap">3 轮真实对话形成的能力证据</div>
+        </div>
+        <div class="row"><span class="row-k">口语练习</span><span class="row-v">目标 15 分钟</span></div>
+        <div class="row"><span class="row-k">重点语法</span><span class="row-v">아/어요</span></div>
+        <button class="start-btn">
+          시작 · 开始今日训练
+          <span class="start-arrow">→</span>
+        </button>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <span class="h-sec">我的韩语能力</span>
+          <span class="tag">数据驱动</span>
+        </div>
+        <div class="row"><span class="row-k">词汇</span><span class="row-v">62 /100</span></div>
+        <div class="row"><span class="row-k">语法</span><span class="row-v">58 /100</span></div>
+        <div class="row"><span class="row-k">发音</span><span class="row-v">71 /100</span></div>
+      </section>
+    </main>
+
+    <nav class="tabbar" id="tabbar">
+      <div class="tabbar-inner">
+        <div class="tabbar-glider" id="glider"></div>
+        <div class="tab-item on" data-index="0">
+          <svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1v-8.5Z"></path></svg>
+          <span class="tab-label">今日</span>
+        </div>
+        <div class="tab-item" data-index="1">
+          <svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 0-3.1 6.3L20 19l-.7-3A7.9 7.9 0 0 0 20 12Z"></path><path d="M8.5 11h7M8.5 14h4.5"></path></svg>
+          <span class="tab-label">对话</span>
+        </div>
+        <div class="tab-item" data-index="2">
+          <svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3.5" width="6" height="11" rx="3"></rect><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"></path></svg>
+          <span class="tab-label">发音</span>
+        </div>
+        <div class="tab-item" data-index="3">
+          <svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5a4 4 0 0 1 4-4v3a1 1 0 0 0-1 1v6H4v-6Z"></path><path d="M13.5 9.5a4 4 0 0 1 4-4v3a1 1 0 0 0-1 1v6h-2.5v-6Z"></path></svg>
+          <span class="tab-label">名句</span>
+        </div>
+        <div class="tab-item" data-index="4">
+          <svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.5" r="3.5"></circle><path d="M5 20c.8-3.2 3.6-5 7-5s6.2 1.8 7 5"></path></svg>
+          <span class="tab-label">我的</span>
+        </div>
+      </div>
+    </nav>
+  </div></body>
+</html>

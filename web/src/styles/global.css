@@ -1,8 +1,8 @@
 /* =========================================================
-   한국어 친구 · 设计系统 v2
-   语言：克制、留白、单一强调色、发丝线边框、克制的层次
-   原则：1px 边界 > 重阴影；黑色主按钮 > 彩色按钮；blue 只用于
-        身份与激活态；中文/韩文混排用系统字栈 + 紧排标题
+   한국어 친구 · 设计系统 v3
+   风格：克制、留白、单一强调色、毛玻璃层次
+   原则：1px 边界 + 柔和投影；黑色主按钮 > 彩色按钮
+        blue 只用于身份与激活态；中文/韩文混排系统字栈
    ========================================================= */
 
 :root {
@@ -16,7 +16,7 @@
   --line:      #E7E7E3;
   --line-2:    #DBDBD5;
 
-  /* 强调色：唯一品牌蓝（身份/激活/链接），danger 用于破坏性操作 */
+  /* 强调色：唯一品牌蓝 */
   --accent:      #0B6BE8;
   --accent-deep: #0952B8;
   --accent-soft: #EBF2FE;
@@ -30,10 +30,12 @@
   --radius-m: 12px;
   --radius-l: 18px;
   --radius-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(20, 21, 25, 0.04), 0 6px 20px rgba(20, 21, 25, 0.05);
-  --shadow-pop:  0 4px 12px rgba(20, 21, 25, 0.08), 0 16px 40px rgba(20, 21, 25, 0.12);
+  --shadow-card: 0 1px 2px rgba(20, 21, 25, 0.03), 0 4px 16px rgba(20, 21, 25, 0.04);
+  --shadow-pop:  0 2px 8px rgba(20, 21, 25, 0.06), 0 12px 36px rgba(20, 21, 25, 0.10);
+  --shadow-float: 0 6px 24px rgba(20, 21, 25, 0.08), 0 20px 48px rgba(20, 21, 25, 0.10);
 
-  --tabbar-h: 58px;
+  --tabbar-h: 60px;
+  --floatbar-offset: 12px;
   --font: -apple-system, "PingFang SC", "SF Pro Text", "Noto Sans CJK KR", "Malgun Gothic", sans-serif;
 }
 
@@ -47,14 +49,18 @@ body {
   font-family: var(--font);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 手机宽度舞台 */
+/* 手机宽度舞台：带微光背景 */
 .shell {
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
   position: relative;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(11, 107, 232, 0.03) 0%, transparent 100%),
+    var(--bg);
 }
 
 button, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
@@ -74,7 +80,7 @@ a { color: inherit; text-decoration: none; }
 .cap   { font-size: 12px; color: var(--ink-3); }
 .num   { font-variant-numeric: tabular-nums; }
 
-/* ===== 卡片：白面 + 发丝线 + 极轻投影 ===== */
+/* ===== 卡片：白面 + 发丝线 + 柔和投影 + 悬停抬升 ===== */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -82,6 +88,15 @@ a { color: inherit; text-decoration: none; }
   box-shadow: var(--shadow-card);
   padding: 18px;
   margin: 10px 14px;
+  transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.3s ease, border-color 0.2s ease;
+}
+.card:active { transform: scale(0.995); }
+@media (hover: hover) {
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-pop);
+    border-color: var(--line-2);
+  }
 }
 
 /* ===== 按钮 ===== */
@@ -94,15 +109,32 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius-m);
   font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0;
   cursor: pointer;
-  transition: transform .15s ease, opacity .15s ease, background .15s ease;
+  transition: transform .15s ease, opacity .15s ease, background .15s ease, box-shadow .2s ease;
   user-select: none;
 }
-.btn:active { transform: scale(0.98); opacity: 0.9; }
+.btn:active { transform: scale(0.97); opacity: 0.9; }
+@media (hover: hover) {
+  .btn:hover { box-shadow: 0 4px 14px rgba(20, 21, 25, 0.08); }
+}
 
-.btn-primary { background: var(--ink); color: #fff; }
+.btn-primary {
+  background: var(--ink);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.5s ease;
+}
+.btn-primary:hover::after { transform: translateX(100%); }
 .btn-primary:disabled, .btn-primary.is-off { background: #C9CAC6; cursor: default; }
+.btn-primary:disabled::after, .btn-primary.is-off::after { display: none; }
 
 .btn-accent { background: var(--accent); color: #fff; }
 .btn-accent:active { background: var(--accent-deep); }
@@ -114,7 +146,7 @@ a { color: inherit; text-decoration: none; }
 
 .btn-pill { border-radius: var(--radius-pill); }
 
-/* ===== 药丸标签（统一一种形态） ===== */
+/* ===== 药丸标签 ===== */
 .tag {
   display: inline-flex;
   align-items: center;
@@ -132,7 +164,7 @@ a { color: inherit; text-decoration: none; }
 .tag-ok     { background: var(--ok-soft); color: var(--ok); }
 .tag-ink    { background: var(--ink); color: #fff; }
 
-/* ===== 选择 chip（激活=墨色，不用彩色） ===== */
+/* ===== 选择 chip ===== */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -156,14 +188,19 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--line-2);
   border-radius: var(--radius-m);
   padding: 11px 13px;
-  font-size: 16px; /* ≥16px：避免手机聚焦输入时自动放大页面 */
+  font-size: 16px;
   background: var(--surface);
-  transition: border-color .15s ease, box-shadow .15s ease;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
 }
-.field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(11, 107, 232, 0.10); }
+.field-input:hover { border-color: var(--line-2); background: var(--surface); }
+.field-input:focus {
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(11, 107, 232, 0.10);
+}
 .field-input::placeholder { color: var(--ink-3); }
 
-/* ===== 入场：轻（只位移淡入，无回弹） ===== */
+/* ===== 入场：轻位移淡入 ===== */
 .rise {
   animation: rise .4s cubic-bezier(.22,.61,.36,1) both;
 }
@@ -256,7 +293,7 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--line-2);
   border-radius: var(--radius-m);
   padding: 10px 12px;
-  font-size: 16px; /* ≥16px：避免手机聚焦时自动放大 */
+  font-size: 16px;
 }
 .modal-input:focus { border-color: var(--accent); }
 .modal-btns { display: flex; gap: 10px; margin-top: 18px; }
@@ -273,7 +310,7 @@ a { color: inherit; text-decoration: none; }
 .modal-btn-ok { background: var(--ink); color: #fff; }
 .modal-btn-ok.danger { background: var(--danger); }
 
-/* ===== 录音波形（唯一保留的动效装饰，仅录音时出现） ===== */
+/* ===== 录音波形 ===== */
 .wavebars {
   display: flex;
   align-items: center;
@@ -299,9 +336,10 @@ a { color: inherit; text-decoration: none; }
   50%      { transform: scaleY(1.1); opacity: 1; }
 }
 
-.safe-bottom { height: calc(env(safe-area-inset-bottom) + 24px); }
-.page-tab { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }
+.safe-bottom { height: calc(env(safe-area-inset-bottom) + 28px); }
+.page-tab { padding-bottom: calc(var(--tabbar-h) + var(--floatbar-offset) + env(safe-area-inset-bottom) + 16px); }
 
 @media (prefers-reduced-motion: reduce) {
   .rise, .sk-line, .wavebars .bar { animation: none; }
+  .card, .btn, .btn-primary::after { transition: none; }
 }

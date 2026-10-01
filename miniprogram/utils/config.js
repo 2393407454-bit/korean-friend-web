@@ -10,7 +10,7 @@ const ENV = 'dev';
 // ---- dev：开发调试用，填你电脑的局域网 IP ----
 // 查看方式：macOS 终端执行  ipconfig getifaddr en0
 // 换了电脑或网络，只改这一行
-const DEV_HOST = '172.20.10.3';
+const DEV_HOST = '192.168.0.106';
 
 // ---- prod：线上地址，备案完成 + HTTPS 配好后填这里 ----
 // 注意：必须是 https，且不要带结尾斜杠

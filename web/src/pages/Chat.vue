@@ -942,7 +942,7 @@ function doUpload(file, kind) {
 .chat-page {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - var(--tabbar-h) - env(safe-area-inset-bottom));
+  height: calc(100dvh - var(--tabbar-h) - var(--floatbar-offset) - env(safe-area-inset-bottom));
   overflow: hidden;
 }
 
@@ -1432,12 +1432,18 @@ function doUpload(file, kind) {
 /* ===== 底部输入栏 ===== */
 .ibar {
   flex-shrink: 0;
-  display: flex; align-items: center; gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 9px 10px;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: saturate(180%) blur(14px);
   -webkit-backdrop-filter: saturate(180%) blur(14px);
   border-top: 1px solid var(--line);
+  transition: box-shadow 0.2s ease;
+}
+.ibar:focus-within {
+  box-shadow: 0 -4px 16px rgba(11, 107, 232, 0.06);
 }
 .ibtn {
   width: 36px; height: 36px;
@@ -1451,7 +1457,10 @@ function doUpload(file, kind) {
   touch-action: none;
 }
 .ibtn svg { width: 19px; height: 19px; }
-.ibtn:active { background: var(--surface-2); color: var(--ink-2); }
+.ibtn:active { transform: scale(0.92); background: var(--surface-2); color: var(--ink-2); }
+@media (hover: hover) {
+  .ibtn:hover { background: var(--surface-2); color: var(--ink-2); }
+}
 .ibtn-mic.is-on { background: var(--danger); color: #fff; animation: mic-pulse 1.4s ease-in-out infinite; }
 .ibtn-tts.is-on { color: var(--accent); }
 @keyframes mic-pulse {
@@ -1470,7 +1479,7 @@ function doUpload(file, kind) {
   color: var(--ink);
   transition: all .18s ease;
 }
-.ti:focus { background: var(--surface); border-color: var(--line-2); }
+.ti:focus { background: var(--surface); border-color: var(--line-2); box-shadow: 0 0 0 3px rgba(11, 107, 232, 0.08); }
 .ti::placeholder { color: var(--ink-3); }
 
 .isend {
@@ -1486,4 +1495,7 @@ function doUpload(file, kind) {
 }
 .isend:active { transform: scale(0.95); background: var(--accent-deep); }
 .isend.is-off { background: #C9CAC6; }
+@media (hover: hover) {
+  .isend:not(.is-off):hover { box-shadow: 0 4px 12px rgba(11, 107, 232, 0.25); }
+}
 </style>

@@ -169,14 +169,15 @@ function resolveAuth(req) {
   return verifyToken(m[1].trim());
 }
 
-// 保护 /api/*：/api/health 与 /api/auth/* 放行；其余必须携带有效令牌。
+// 保护 /api/*：/api/health、/api/session 与 /api/auth/* 放行；其余必须携带有效令牌。
+// /api/session 用于微信临时登录 code 换取用户身份，本身就是登录前置接口。
 // AUTH_REQUIRED=false 时退回兼容模式（无令牌放行，供小程序联调），但带了无效令牌仍拒绝。
 function middleware(req, res, next) {
   // 先尽力解析令牌身份（auth 路由如 /me 也要用），再做保护判断
   const uid = resolveAuth(req);
   if (uid) req.authUserId = uid;
   const p = req.path;
-  if (p === '/health' || p.startsWith('/auth/')) return next();
+  if (p === '/health' || p === '/session' || p.startsWith('/auth/')) return next();
   if (uid) return next();
   const hadToken = /^Bearer\s+/i.test(String(req.headers.authorization || ''));
   if (hadToken) return res.status(401).json({ error: '登录已过期，请重新登录' });
