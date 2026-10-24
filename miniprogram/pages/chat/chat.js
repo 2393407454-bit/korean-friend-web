@@ -371,7 +371,7 @@ Page({
           const text = m.content;
           return m.role === 'user'
             ? { id: 'm' + ++this.msgSeq, role: 'user', text }
-            : { id: 'm' + ++this.msgSeq, role: 'assistant', text, blocks: mdparse.parse(text) };
+            : { id: 'm' + ++this.msgSeq, role: 'assistant', text, blocks: mdparse.parse(text), sources: m.sources || [] };
         });
         // 一次性批量上屏：避免循环 setData + scrollInto 连续变化造成的卡顿
         const messages = this.data.messages.concat(loaded);
@@ -531,6 +531,7 @@ Page({
           text: display,
           blocks: mdparse.parse(display),
           speech: final.speech || '',
+          sources: final.sources || [],
           korean: final.korean_sentences || [],
           // 结构化纠错卡：后端 state_patch.errors 规范化结果
           errors: (final.errors || []).map((e) => ({ ...e, typeLabel: CODE_LABEL[e.code] || '提示' })),
@@ -542,6 +543,7 @@ Page({
         status: 'listening',
         scrollInto: 'msg-' + (this.data.messages.length - 1)
       });
+      if (final.speech && this.data.ttsEnabled) voice.prepareSpeak(final.speech);
     }
     this._twBuf = '';
     this._twShown = 0;
@@ -612,6 +614,15 @@ Page({
     wx.setClipboardData({
       data: text,
       success: () => wx.showToast({ title: '已复制 ✨', icon: 'none' })
+    });
+  },
+
+  onSourceTap(e) {
+    const url = String((e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.url) || '');
+    if (!/^https?:\/\//i.test(url)) return;
+    wx.setClipboardData({
+      data: url,
+      success: () => wx.showToast({ title: '来源链接已复制', icon: 'none' })
     });
   },
 
@@ -703,6 +714,7 @@ Page({
       ['messages[' + idx + '].pending']: false,
       scrollInto: 'msg-' + (this.data.messages.length - 1)
     });
+    if (speech && this.data.ttsEnabled) voice.prepareSpeak(speech);
   },
 
   removeMessage(id) {

@@ -430,6 +430,10 @@
   background: var(--c-klein);
   color: #fff;
 }
+.source-list { margin-top: 14rpx; padding-top: 10rpx; border-top: 1rpx solid rgba(14, 24, 54, 0.12); }
+.source-label { margin-bottom: 6rpx; color: var(--c-mute); font-size: 21rpx; font-weight: 700; }
+.source-item { display: flex; flex-wrap: wrap; gap: 8rpx; padding: 5rpx 0; color: var(--c-klein-deep); font-size: 22rpx; line-height: 1.4; }
+.source-date { color: var(--c-mute); }
 
 .msg-end { height: 20rpx; }
 

@@ -61,6 +61,7 @@ function streamChat({ data, onDelta, onDone, onError }) {
           done: true,
           display: d.display || '',
           speech: d.speech || '',
+          sources: d.sources || [],
           errors: d.errors || [],
           mastered: d.mastered || [],
           korean_sentences: d.korean_sentences || [],
