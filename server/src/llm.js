@@ -2,6 +2,7 @@
 // 未配置对应 API Key 时自动进入 mock 模式，方便前端先跑通交互。
 require('dotenv').config();
 const fs = require('fs');
+const crypto = require('crypto');
 const OpenAI = require('openai');
 
 const clients = new Map();
@@ -16,9 +17,111 @@ function client(baseURL, apiKey) {
 const LLM = {
   baseURL: process.env.LLM_BASE_URL,
   apiKey: process.env.LLM_API_KEY || '',
-  model: process.env.LLM_MODEL || 'glm-4-flash'
+  model: process.env.LLM_MODEL || 'glm-4.7-flash'
 };
-const VISION_MODEL = process.env.VISION_MODEL || 'glm-4v-flash';
+
+// 联网搜索（智谱 GLM 内置 web_search 工具）：让模型先搜索核实再回复。
+// LLM_WEB_SEARCH=true/false 强制开关；默认 auto = 仅在智谱 bigmodel 接口下自动开启。
+const WEB_SEARCH = (() => {
+  const v = String(process.env.LLM_WEB_SEARCH || 'auto').toLowerCase();
+  if (['true', '1', 'on', 'yes'].includes(v)) return true;
+  if (['false', '0', 'off', 'no'].includes(v)) return false;
+  return /bigmodel|zhipu/i.test(LLM.baseURL || '');
+})();
+
+function webSearchTool() {
+  return [{ type: 'web_search', web_search: { enable: true, search_result: true } }];
+}
+
+// 联网分类只拦截需要时效/出处支持的问题。稳定语法和日常闲聊仍直接回答，
+// 但娱乐动态、公开传闻、影视台词、网络词义和在韩实用信息不能只靠模型记忆。
+const SEARCH_HINT =
+  /(最近|最新|现在|目前|当下|今天|昨天|今年|明年|刚刚|本周|本月|近期|流行|热[门搜榜]|新闻|消息|新歌|回归|컴백|专辑|单曲|歌词|歌名|哪首歌|谁唱的|主题曲|ost|mv|榜单|排名|成员|组合成员|成员介绍|票价|价格|多少钱|费用|地址|在哪[里儿]|怎么去|营业时间|几点|开放|政策|签证|汇率|天气|上映|播出|开播|综艺|演唱会|见面会|巡演|官宣|机场路透|成员变动|恋爱传闻|恋情|绯闻|约会|分手|塌房|争议|道歉|八卦|传闻|热搜|名台词|经典台词|名场面|第几集|出处|原台词|流行语|网络用语|韩网梗|热梗|缩略语|俚语|新词|词源|房租|月租|押金|交通卡|地铁票|入境|医保|医疗|就医|银行开户|考试报名|topik.*(时间|报名)|搜一下|查一下|帮我查|网上)/i;
+
+function userMessageText(messages) {
+  const last = [...messages].reverse().find((m) => m && m.role === 'user');
+  if (!last) return '';
+  return typeof last.content === 'string'
+    ? last.content
+    : Array.isArray(last.content)
+      ? last.content.map((c) => (c && c.text) || '').join(' ')
+      : '';
+}
+
+function needsSearch(messages) {
+  const text = userMessageText(messages);
+  if (SEARCH_HINT.test(text)) return true;
+  if (/(语法|助词|变形|时态|发音|怎么说|怎么读)/.test(text)) return false;
+  return /[\uac00-\ud7a3ㄱ-ㅎㅏ-ㅣ]/.test(text) && /(词源|出处|梗|缩略语|流行语|网络用语|俚语|热梗|新词|什么意思|什么含义|怎么理解|怎么火)/.test(text);
+}
+
+function addSearchUnavailableContext(messages) {
+  const notice = {
+    role: 'system',
+    content: '本轮联网搜索工具未能完成检索。不要声称已搜索、不要编造来源或当前事实；仍先回答可确认的常识/背景，清楚说明时效信息未能核实，并给用户一个具体的继续办法。'
+  };
+  return messages.length && messages[0].role === 'system'
+    ? [messages[0], notice, ...messages.slice(1)]
+    : [notice, ...messages];
+}
+
+function normalizeSearchSources(items) {
+  const list = Array.isArray(items) ? items : items ? [items] : [];
+  const seen = new Set();
+  return list.map((item) => {
+    if (!item || typeof item !== 'object') return null;
+    const url = String(item.url || item.link || item.source_url || item.sourceUrl || '').trim();
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) return null;
+    seen.add(url);
+    const title = String(item.title || item.name || item.source || item.site_name || item.media || '').trim();
+    const publishedAt = String(item.publish_time || item.published_at || item.publish_date || item.date || '').trim();
+    return {
+      title: (title || url).slice(0, 180),
+      url: url.slice(0, 2048),
+      published_at: publishedAt.slice(0, 80)
+    };
+  }).filter(Boolean).slice(0, 5);
+}
+
+function collectSearchResults(value, results, depth = 0) {
+  if (!value || depth > 6) return;
+  if (typeof value === 'string') {
+    if (/^\s*[\[{]/.test(value)) {
+      try { collectSearchResults(JSON.parse(value), results, depth + 1); } catch (e) { /* 非 JSON 工具文本 */ }
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) collectSearchResults(entry, results, depth + 1);
+    return;
+  }
+  if (typeof value !== 'object') return;
+  if (value.search_result) collectSearchResults(value.search_result, results, depth + 1);
+  if (value.url || value.link || value.source_url || value.sourceUrl) results.push(value);
+  // 智谱在不同兼容接口中会把搜索结果放在 tool_calls 或 tool_calls_data 里。
+  for (const key of ['tool_calls', 'tool_calls_data', 'function', 'event', 'choices', 'delta', 'message']) {
+    if (value[key]) collectSearchResults(value[key], results, depth + 1);
+  }
+}
+
+function searchSourcesFromMessage(message) {
+  const results = [];
+  collectSearchResults(message, results);
+  return normalizeSearchSources(results);
+}
+
+function searchSourcesFromChunk(chunk) {
+  const results = [];
+  collectSearchResults(chunk, results);
+  return normalizeSearchSources(results);
+}
+
+const VISION_MODEL = process.env.VISION_MODEL || 'glm-4.6v-flash';
+
+// GLM-4.5/4.6/4.7 系列默认开启思考模式，对话场景关闭以保证响应速度
+function noThinking(model) {
+  return /glm-4\.[5-9]/i.test(model || '');
+}
 const ASR = {
   enabled: !!(process.env.ASR_API_KEY && process.env.ASR_BASE_URL),
   baseURL: process.env.ASR_BASE_URL,
@@ -59,9 +162,9 @@ function mockChat(userText) {
   const said = String(userText || '').slice(0, 60);
   return JSON.stringify({
     speech:
-      '안녕하세요! 지금은 데모 모드예요. 서버의 .env 파일에 LLM_API_KEY 를 설정하면 진짜 한국어 선생님이 대답할 거예요!',
+      '안녕하세요! 지금은 데모 모드예요. 你好！现在是演示模式。서버에 API 키를 설정하면 한국어 선생님이 대답할 거예요. 配置 API 密钥后，韩语老师就能正常回答了。',
     display:
-      '⚠️ 演示模式：后端还没有配置 LLM_API_KEY。\n\n复制 server/.env.example 为 .env，填入智谱 GLM 或其他 OpenAI 兼容服务的 Key 后重启即可。\n\n你刚才说的是：「' +
+      '⚠️ 演示模式：后端还没有配置 LLM_API_KEY。\n\n안녕하세요! 한국어로 함께 연습해요.\n你好！我们一起用韩语练习。\n\n复制 server/.env.example 为 .env，填入智谱 GLM 或其他 OpenAI 兼容服务的 Key 后重启即可。\n\n你刚才说的是：「' +
       said +
       '」\n配置好后，我就会用韩语陪你聊天、纠错、带你练发音啦！',
     state_patch: {},
@@ -90,14 +193,18 @@ function releaseSlot() {
   if (next) next();
 }
 
-async function createWithRetry(body, maxTokens) {
+async function createWithRetry(body, maxTokens, { includeSearchSources = false } = {}) {
   body.max_tokens = maxTokens;
   let lastErr = null;
   for (let attempt = 0; attempt <= 2; attempt++) {
     await acquireSlot();
     try {
       const res = await client(LLM.baseURL, LLM.apiKey).chat.completions.create(body);
-      return (res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || '';
+      const message = res.choices && res.choices[0] && res.choices[0].message;
+      const content = (message && message.content) || '';
+      return includeSearchSources
+        ? { content, sources: searchSourcesFromMessage(message) }
+        : content;
     } catch (e) {
       lastErr = e;
       const st = (e && e.status) || 0;
@@ -116,20 +223,33 @@ async function createWithRetry(body, maxTokens) {
   throw lastErr || new Error('LLM 调用失败');
 }
 
-async function chatText(messages, temperature, maxTokens) {
+async function chatText(messages, temperature, maxTokens, opts) {
   if (!LLM.apiKey) {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
     const content = lastUser && typeof lastUser.content === 'string' ? lastUser.content : '';
-    return mockChat(content);
+    const mock = mockChat(content);
+    return opts && opts.includeSearchSources ? { content: mock, sources: [] } : mock;
   }
   const body = {
     model: LLM.model,
     messages,
     temperature: temperature == null ? 0.7 : temperature
   };
-  // GLM-4.5 系列默认开启思考模式，对话场景关闭以保证响应速度
-  if (LLM.model.includes('4.5')) body.thinking = { type: 'disabled' };
-  return createWithRetry(body, maxTokens || 1000);
+  // GLM-4.5 及以上系列默认开启思考模式，对话场景关闭以保证响应速度
+  if (noThinking(LLM.model)) body.thinking = { type: 'disabled' };
+  // 对话主链路按需开启联网搜索：消息含时效/事实关键词才挂搜索工具
+  const shouldSearch = WEB_SEARCH && opts && opts.search && needsSearch(messages);
+  if (shouldSearch) body.tools = webSearchTool();
+  try {
+    return await createWithRetry(body, maxTokens || 1000, {
+      includeSearchSources: !!(shouldSearch && opts && opts.includeSearchSources)
+    });
+  } catch (e) {
+    if (!shouldSearch || (e && e.status) === 429) throw e;
+    const fallbackBody = { ...body, messages: addSearchUnavailableContext(messages) };
+    delete fallbackBody.tools;
+    return createWithRetry(fallbackBody, maxTokens || 1000);
+  }
 }
 
 // 当视觉模型只返回韩文原句时，用轻量文本模型补齐零基础学习字段。
@@ -160,16 +280,18 @@ async function enrichSongLines(lines) {
 }
 
 async function chatJSON(messages) {
-  const text = await chatText(messages, 0.7);
+  const result = await chatText(messages, 0.7, undefined, { search: true, includeSearchSources: true });
+  const text = result && typeof result === 'object' ? result.content : result;
+  const sources = result && typeof result === 'object' ? result.sources || [] : [];
   const parsed = extractJSON(text);
-  if (parsed && (parsed.speech || parsed.display)) return parsed;
+  if (parsed && (parsed.speech || parsed.display)) return { ...parsed, sources };
   // 模型没按协议输出时整体降级为纯文本回复
-  return { speech: text.slice(0, 300), display: text, state_patch: {}, ui_hints: {} };
+  return { speech: text.slice(0, 300), display: text, state_patch: {}, ui_hints: {}, sources };
 }
 
 // 流式对话：逐增量回调 onDelta，返回完整文本。
 // 首块未产出前的 429/5xx 会自动重试；已开始输出后的失败直接抛出（前端保留已收文本）。
-async function chatStream(messages, { temperature, maxTokens, onDelta } = {}) {
+async function chatStream(messages, { temperature, maxTokens, onDelta, onSources } = {}) {
   if (!LLM.apiKey) {
     const mock = mockChat((messages.find((m) => m.role === 'user') || {}).content || '');
     const parsed = extractJSON(mock);
@@ -177,17 +299,23 @@ async function chatStream(messages, { temperature, maxTokens, onDelta } = {}) {
     if (onDelta) onDelta(text);
     return text;
   }
+  const shouldSearch = WEB_SEARCH && needsSearch(messages);
+  let searchFallbackUsed = false;
   const buildBody = () => {
     const body = {
       model: LLM.model,
-      messages,
+      messages: searchFallbackUsed ? addSearchUnavailableContext(messages) : messages,
       stream: true,
       temperature: temperature == null ? 0.7 : temperature,
       max_tokens: maxTokens || 800 // 不设会导致回复长度不受控、流式时间被拉长
     };
-    if (LLM.model.includes('4.5')) body.thinking = { type: 'disabled' };
+    if (noThinking(LLM.model)) body.thinking = { type: 'disabled' };
+    // 对话主链路按需开启联网搜索：消息含时效/事实关键词才挂搜索工具
+    if (shouldSearch && !searchFallbackUsed) body.tools = webSearchTool();
     return body;
   };
+
+  const foundSources = new Map();
 
   let lastErr = null;
   for (let attempt = 0; attempt <= 2; attempt++) {
@@ -197,6 +325,7 @@ async function chatStream(messages, { temperature, maxTokens, onDelta } = {}) {
     try {
       const stream = await client(LLM.baseURL, LLM.apiKey).chat.completions.create(buildBody());
       for await (const chunk of stream) {
+        for (const source of searchSourcesFromChunk(chunk)) foundSources.set(source.url, source);
         const delta = (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) || '';
         if (delta) {
           emitted = true;
@@ -206,11 +335,17 @@ async function chatStream(messages, { temperature, maxTokens, onDelta } = {}) {
           }
         }
       }
+      if (onSources) onSources([...foundSources.values()].slice(0, 5));
       return full;
     } catch (e) {
       lastErr = e;
       const st = (e && e.status) || 0;
       const retryable = st === 429 || st === 500 || st === 502 || st === 503;
+      if (shouldSearch && !searchFallbackUsed && !emitted && st !== 429) {
+        searchFallbackUsed = true;
+        foundSources.clear();
+        continue;
+      }
       if (emitted || !retryable) {
         if (st === 429) {
           const err = new Error('AI 老师有点忙（免费额度限流），请等 10 秒再发送');
@@ -234,7 +369,7 @@ async function chatStream(messages, { temperature, maxTokens, onDelta } = {}) {
 
 async function visionCall(content, maxTokens) {
   const body = { model: VISION_MODEL, messages: [{ role: 'user', content }] };
-  if (VISION_MODEL.includes('4.5')) body.thinking = { type: 'disabled' };
+  if (noThinking(VISION_MODEL)) body.thinking = { type: 'disabled' };
   return createWithRetry(body, maxTokens || 700);
 }
 
@@ -440,24 +575,36 @@ async function edgeSynthesize(text) {
     return buf ? buf.toString('base64') : null;
   }
 
-  // 多语言段：各段分别合成后拼接
-  const buffers = [];
-  for (const s of segs) {
-    const buf = await edgeTtsSeg(s.text, s.lang === 'ko' ? EDGE_VOICE_KO : EDGE_VOICE_ZH);
-    if (!buf) return null; // 任一段失败 → 交回调用方走下一级兜底
-    buffers.push(buf);
-  }
+  // 多语言段按原顺序拼接；韩语与中文各自串行复用连接、两种音色并行合成。
+  // 原来所有小段逐段 await，混合语言回答每次切换语言都额外等待一次网络往返。
+  const lanes = { ko: Promise.resolve(), zh: Promise.resolve() };
+  const jobs = segs.map((s) => {
+    const voice = s.lang === 'ko' ? EDGE_VOICE_KO : EDGE_VOICE_ZH;
+    const job = lanes[s.lang].then(() => edgeTtsSeg(s.text, voice));
+    lanes[s.lang] = job.then(() => undefined, () => undefined);
+    return job;
+  });
+  const buffers = await Promise.all(jobs);
+  if (buffers.some((buf) => !buf)) return null; // 任一段失败 → 交回调用方走下一级兜底
   if (buffers.length === 1) return buffers[0].toString('base64');
   const merged = await ffmpegConcat(buffers);
   return (merged || Buffer.concat(buffers)).toString('base64');
 }
 
-async function synthesize(text) {
-  const t = String(text || '').trim();
-  if (!t) return null;
+const TTS_CACHE_LIMIT = 32;
+const TTS_CACHE_TTL_MS = 10 * 60 * 1000;
+const ttsCache = new Map(); // key -> { audio, at }; bounded process-local LRU
+const ttsInFlight = new Map(); // key -> Promise<string|null>; coalesce duplicate requests
 
+function cacheTts(key, audio) {
+  ttsCache.delete(key);
+  ttsCache.set(key, { audio, at: Date.now() });
+  while (ttsCache.size > TTS_CACHE_LIMIT) ttsCache.delete(ttsCache.keys().next().value);
+}
+
+async function synthesizeUncached(text) {
   // 1) Edge-TTS：免费、无 Key、跨平台（真机部署首选）
-  const edge = await edgeSynthesize(t);
+  const edge = await edgeSynthesize(text);
   if (edge) return edge;
 
   // 2) 云 TTS（配置了且不在冷却期才尝试）
@@ -466,7 +613,7 @@ async function synthesize(text) {
       const res = await client(TTS.baseURL, TTS.apiKey).audio.speech.create({
         model: TTS.model,
         voice: TTS.voice || undefined,
-        input: t.slice(0, 500)
+        input: text.slice(0, 500)
       });
       const buf = Buffer.from(await res.arrayBuffer());
       return buf.toString('base64');
@@ -479,10 +626,36 @@ async function synthesize(text) {
 
   // 3) 本地兜底：macOS say（仅本机部署时可用；线上走 Edge-TTS/云 TTS）
   if (process.platform === 'darwin') {
-    const b64 = await localSay(t);
+    const b64 = await localSay(text);
     if (b64) return b64;
   }
   return null;
 }
 
-module.exports = { caps, chatText, enrichSongLines, chatJSON, chatStream, analyzeFrame, analyzeImage, analyzeSongImage, transcribe, synthesize, extractJSON };
+async function synthesize(text) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  // Use a digest as the map key so the in-memory cache does not keep a second copy of spoken text.
+  const key = crypto.createHash('sha256')
+    .update(`${EDGE_VOICE_KO}|${EDGE_VOICE_ZH}|${EDGE_RATE}|${TTS.model}|${TTS.voice}|${t}`)
+    .digest('hex');
+  const cached = ttsCache.get(key);
+  if (cached && Date.now() - cached.at < TTS_CACHE_TTL_MS) {
+    ttsCache.delete(key);
+    ttsCache.set(key, { ...cached, at: Date.now() });
+    return cached.audio;
+  }
+  if (cached) ttsCache.delete(key);
+  if (ttsInFlight.has(key)) return ttsInFlight.get(key);
+
+  const request = synthesizeUncached(t)
+    .then((audio) => {
+      if (audio) cacheTts(key, audio);
+      return audio;
+    })
+    .finally(() => ttsInFlight.delete(key));
+  ttsInFlight.set(key, request);
+  return request;
+}
+
+module.exports = { caps, chatText, enrichSongLines, chatJSON, chatStream, analyzeFrame, analyzeImage, analyzeSongImage, transcribe, synthesize, extractJSON, needsSearch };

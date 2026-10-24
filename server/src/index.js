@@ -112,7 +112,7 @@ app.post('/api/chat/stream', async (req, res) => {
       userId, text, channel: channel || 'text', mode, characterId, scenarioId,
       onDelta: (d) => send({ t: d })
     });
-    send({ done: true, display: final.display, speech: final.speech, korean_sentences: final.korean_sentences, errors: final.errors, mastered: final.mastered, profile: final.profile });
+    send({ done: true, display: final.display, speech: final.speech, sources: final.sources || [], korean_sentences: final.korean_sentences, errors: final.errors, mastered: final.mastered, profile: final.profile });
   } catch (e) {
     console.error('[chat/stream]', e.message);
     send({ error: e.status === 429 ? e.message : '服务开小差了：' + e.message });

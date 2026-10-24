@@ -7,11 +7,83 @@ const characters = require('./characters');
 const scenarios = require('./scenarios');
 const demo = require('./demo');
 const { buildSystemPrompt, buildStreamSystemPrompt } = require('./system-prompt');
+const songLibrary = require('./song-library');
 const security = require('./security');
 
 const SRS_DAYS = [1, 3, 7, 14]; // 间隔复习：1/3/7/14 天
 const LEVEL_RATIO = { TOPIK1: 0.3, TOPIK2: 0.3, TOPIK3: 0.6, TOPIK4: 0.6, TOPIK5: 0.9, TOPIK6: 0.9 };
 const GOALS = ['kpop', 'kdrama', 'study', 'work', 'travel', 'hobby'];
+const SELF_LEVELS = ['absolute_beginner', 'beginner', 'intermediate', 'advanced'];
+
+function normalizedSample(text) {
+  return String(text || '').toLowerCase().replace(/[^\uac00-\ud7a3ㄱ-ㅎㅏ-ㅣ]/g, '');
+}
+
+function hasMeaningfulKorean(text) {
+  const raw = String(text || '');
+  const hangul = (raw.match(/[\uac00-\ud7a3ㄱ-ㅎㅏ-ㅣ]/g) || []).length;
+  const letters = (raw.match(/[\p{L}\p{M}]/gu) || []).length;
+  return hangul >= 3 && letters > 0 && hangul / letters >= 0.5;
+}
+
+function directBeginnerPhraseReply(text) {
+  const raw = String(text || '');
+  if (!/怎么办/.test(raw) || !/(韩语|韩文|韩国语)/.test(raw) || !/(怎么说|怎么读|怎么表达|翻译)/.test(raw)) return null;
+  return {
+    display: '最常用、适合初学者的说法：\n어떡해요?（eo-tteok-hae-yo）\n意思是“怎么办？/我该怎么办？”',
+    speech: '“怎么办”可以说“어떡해요”，意思是“怎么办”或“我该怎么办”。'
+  };
+}
+
+function saveGuardedTurn(doc, userText, reply) {
+  doc.messages.push({ role: 'user', content: String(userText || '').slice(0, 600) });
+  doc.messages.push({ role: 'assistant', content: String(reply || '').slice(0, 600) });
+  if (doc.messages.length > 24) doc.messages = doc.messages.slice(-24);
+  touchStats(doc, { turns: 1, errors: 0, newWords: 0 });
+  store.saveUser(doc);
+}
+
+function hasNewKoreanSample(doc, text) {
+  if (!hasMeaningfulKorean(text)) return false;
+  const sample = normalizedSample(text);
+  return !(doc.messages || []).slice(-24).some((m) => m && m.role === 'user' && normalizedSample(m.content) === sample);
+}
+
+function candidateEvidenceTurns(doc, text) {
+  const assessment = (doc.profile && doc.profile.assessment) || {};
+  return (Number(assessment.evidence_turns) || 0) + (hasNewKoreanSample(doc, text) ? 1 : 0);
+}
+
+function recordLearnerEvidence(doc, text) {
+  const p = doc.profile;
+  if (!hasNewKoreanSample(doc, text)) return false;
+  p.assessment = p.assessment || { status: 'not_assessed', source: 'none', confidence: 'low', evidence_turns: 0, assessed_at_evidence: 0, basis: [] };
+  p.assessment.evidence_turns = (Number(p.assessment.evidence_turns) || 0) + 1;
+  return true;
+}
+
+function detectSelfReportedLevel(text) {
+  const t = String(text || '').toLowerCase();
+  if (/(零基础|完全不会韩语|不会韩语|没学过韩语|刚开始学韩语|刚入门)/.test(t)) return 'absolute_beginner';
+  if (/(韩语初学者|韩语初级|我是初学者|我是初级|topik\s*[12]|topik\s*1|topik\s*2)/i.test(t)) return 'beginner';
+  if (/(韩语中级|我是中级|topik\s*[34]|topik\s*3|topik\s*4)/i.test(t)) return 'intermediate';
+  if (/(韩语高级|我是高级|topik\s*[56]|topik\s*5|topik\s*6)/i.test(t)) return 'advanced';
+  return '';
+}
+
+function applySelfReportedLevel(profile, text) {
+  const level = detectSelfReportedLevel(text);
+  if (!SELF_LEVELS.includes(level)) return;
+  profile.self_reported_level = level;
+  const assessment = profile.assessment || (profile.assessment = {});
+  if (assessment.status !== 'assessed') {
+    assessment.status = 'provisional';
+    assessment.source = 'self_reported';
+    assessment.confidence = 'low';
+    assessment.updated_at = new Date().toISOString();
+    assessment.basis = ['用户自述水平，尚未通过韩语表达验证'];
+  }
+}
 
 // 情景解析（Phase 8）：scenarioId → 场景元数据写入 session，返回当前进行中的场景
 function resolveScenario(doc, scenarioId) {
@@ -37,22 +109,31 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function applyStatePatch(doc, patch) {
+function applyStatePatch(doc, patch, options = {}) {
   if (!patch || typeof patch !== 'object') return { mastered: [] };
   doc.session = doc.session || {};
   const p = doc.profile;
   const pr = doc.progress;
   const events = { mastered: [] };
 
-  if (patch.level && /^TOPIK[1-6]$/.test(patch.level)) {
+  const assessment = p.assessment || (p.assessment = { status: 'not_assessed', source: 'none', confidence: 'low', evidence_turns: 0, assessed_at_evidence: 0, updated_at: null, basis: [] });
+  const pendingEvidence = (Number(assessment.evidence_turns) || 0) - (Number(assessment.assessed_at_evidence) || 0);
+  const mayAssessLevel = hasMeaningfulKorean(options.learnerText) && pendingEvidence >= 3;
+  if (mayAssessLevel && patch.level && /^TOPIK[1-6]$/.test(patch.level)) {
     p.level = patch.level;
-    // 等级确定时，自动按教学规范落地双语配比与罗马音开关（模型未显式给出时）
+    assessment.status = 'assessed';
+    assessment.source = 'observed_korean';
+    assessment.confidence = assessment.evidence_turns >= 6 ? 'high' : 'medium';
+    assessment.assessed_at_evidence = assessment.evidence_turns;
+    assessment.updated_at = new Date().toISOString();
+    assessment.basis = Array.isArray(patch.assessment_basis)
+      ? patch.assessment_basis.map((x) => String(x).slice(0, 80)).slice(0, 3)
+      : ['根据 ' + assessment.evidence_turns + ' 条不同的韩语表达综合估级'];
     if (patch.korean_ratio == null) p.korean_ratio = LEVEL_RATIO[patch.level];
-    if (patch.romanization == null) p.romanization = LEVEL_RATIO[patch.level] <= 0.3;
   }
   if (patch.goal && GOALS.includes(patch.goal)) p.goal = patch.goal;
   if (typeof patch.korean_ratio === 'number') p.korean_ratio = patch.korean_ratio;
-  if (typeof patch.romanization === 'boolean') p.romanization = patch.romanization;
+  // 标音是用户偏好，不由模型随等级自动覆盖。
   if (Array.isArray(patch.interests)) {
     p.interests = [...new Set([...(p.interests || []), ...patch.interests.map(String)])].slice(0, 10);
   }
@@ -65,7 +146,7 @@ function applyStatePatch(doc, patch) {
   }
   if (pr.vocab.length > 500) pr.vocab = pr.vocab.slice(-500);
 
-  for (const r of patch.vocab_reviewed || []) {
+  for (const r of (hasMeaningfulKorean(options.learnerText) ? patch.vocab_reviewed || [] : [])) {
     const found = pr.vocab.find((x) => x.ko === r.ko);
     if (!found) continue;
     if (r.correct) {
@@ -77,7 +158,7 @@ function applyStatePatch(doc, patch) {
     }
   }
 
-  for (const g of patch.grammar_learned || []) {
+  for (const g of (hasMeaningfulKorean(options.learnerText) ? patch.grammar_learned || [] : [])) {
     if (!g) continue;
     pr.grammar_learning = (pr.grammar_learning || []).filter((x) => x !== g);
     if (!pr.grammar_mastered.includes(g)) pr.grammar_mastered.push(g);
@@ -85,7 +166,7 @@ function applyStatePatch(doc, patch) {
 
   // 同类错误累计次数，触发「第 3 次开专项课」的教学规则
   // Phase 5：错误结构化（point 知识点 / severity 严重度 / explain 中文解释）
-  for (const e of patch.errors || []) {
+  for (const e of (hasMeaningfulKorean(options.learnerText) ? patch.errors || [] : [])) {
     if (!e || !e.wrong) continue;
     const found = pr.error_log.find((x) => x.wrong === e.wrong);
     if (found) {
@@ -113,7 +194,7 @@ function applyStatePatch(doc, patch) {
   if (pr.error_log.length > 200) pr.error_log = pr.error_log.slice(-200);
 
   // 流畅度/自然度定性评估：进入画像证据池（≥3 轮后参与能力评分）
-  if (patch.quality && typeof patch.quality === 'object') {
+  if (hasMeaningfulKorean(options.learnerText) && patch.quality && typeof patch.quality === 'object') {
     const q = patch.quality;
     const flu = typeof q.fluency === 'number' ? Math.max(0, Math.min(100, Math.round(q.fluency))) : null;
     const nat = typeof q.naturalness === 'number' ? Math.max(0, Math.min(100, Math.round(q.naturalness))) : null;
@@ -127,13 +208,13 @@ function applyStatePatch(doc, patch) {
     }
   }
 
-  for (const w of patch.weak_points || []) {
+  for (const w of (hasMeaningfulKorean(options.learnerText) ? patch.weak_points || [] : [])) {
     if (w && !pr.weak_points.includes(w)) pr.weak_points.push(String(w));
   }
 
   // —— 掌握闭环（Phase 6）：模型上报「本轮正确使用了此前易错知识点」——
   // 命中 error_log 中同名/同句错误 → 标记 mastered；从 weak_points 移除；进入 mastered_grammar
-  if (Array.isArray(patch.errors_mastered)) {
+  if (hasMeaningfulKorean(options.learnerText) && Array.isArray(patch.errors_mastered)) {
     for (const pt of patch.errors_mastered) {
       if (!pt) continue;
       const key = String(pt);
@@ -183,7 +264,8 @@ function salvageNestedProtocol(t) {
     speech: speech != null ? unescapeJsonString(speech) : '',
     display: display != null ? unescapeJsonString(display) : speech != null ? unescapeJsonString(speech) : '',
     state_patch: patch && typeof patch === 'object' ? patch : {},
-    ui_hints: {}
+    ui_hints: {},
+    sources: []
   };
 }
 
@@ -204,17 +286,55 @@ function normalizeOut(out) {
                 ? JSON.stringify(inner.display, null, 2)
                 : (inner.speech || ''),
           state_patch: inner.state_patch || out.state_patch || {},
-          ui_hints: inner.ui_hints || out.ui_hints || {}
+          ui_hints: inner.ui_hints || out.ui_hints || {},
+          sources: out.sources || []
         };
       }
       const salvaged = salvageNestedProtocol(t);
-      if (salvaged) return salvaged;
+      if (salvaged) return { ...salvaged, sources: out.sources || [] };
     }
   }
   if (out.display && typeof out.display === 'object') {
     out.display = JSON.stringify(out.display, null, 2);
   }
   return out;
+}
+
+// 统计未配中文翻译的韩语句段：count=违规段数，maxLen=最长违规段的韩字字符数
+function untranslatedKoreanStats(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  let count = 0, maxLen = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const spans = [...line.matchAll(/[\uac00-\ud7a3ㄱ-ㅎㅏ-ㅣ][\uac00-\ud7a3ㄱ-ㅎㅏ-ㅣ\s.,!?~…:;'"“”‘’()[\]—-]*/g)];
+    for (const span of spans) {
+      const after = line.slice(span.index + span[0].length);
+      if (/[\u3400-\u9fff]/.test(after)) continue;
+      let next = i + 1;
+      while (next < lines.length && !lines[next].trim()) next++;
+      if (next < lines.length && /[\u3400-\u9fff]/.test(lines[next])) continue;
+      count++;
+      const hangulLen = (span[0].match(/[\uac00-\ud7a3ㄱ-ㅎㅏ-ㅣ]/g) || []).length;
+      if (hangulLen > maxLen) maxLen = hangulLen;
+    }
+  }
+  return { count, maxLen };
+}
+
+function hasUntranslatedKoreanSentence(text) {
+  return untranslatedKoreanStats(text).count > 0;
+}
+
+// 只有严重违规（整句/整段韩语无翻译）才兜底替换；个别短引句、单词级引用不打断正常回复
+function isSevereUntranslated(text) {
+  const s = untranslatedKoreanStats(text);
+  return s.maxLen >= 12 || s.count >= 3;
+}
+
+function guardBeginnerTranslation(out) {
+  if (!out || !isSevereUntranslated(out.display)) return out;
+  const safe = '抱歉，我这次没能可靠地配好韩语和中文翻译。\n다시 확인할게요.\n我再确认一下，再给你准确的说法。';
+  return { ...out, display: safe, speech: safe, state_patch: {}, errors: [], mastered: [], korean_sentences: [] };
 }
 
 async function handleChat({ userId, text, channel, mode, frameBase64, characterId, scenarioId }) {
@@ -233,8 +353,8 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
   // 内容安全（发布上线后由微信 msgSecCheck 承担）
   if (text && !(await security.checkText(text))) {
     return {
-      speech: '이 이야기는 함께 공부하기에 조금 곤란해요. 다른 이야기 해요!',
-      display: '😅 这条内容不太适合一起学习，我们聊点别的吧！다른 주제로 가요~',
+      speech: '이 이야기는 함께 공부하기에 조금 곤란해요. 다른 이야기 해요. 这个话题不太适合一起学习，我们换一个话题吧。',
+      display: '😅 这条内容不太适合一起学习，我们换个话题聊吧。\n다른 주제로 이야기해요.\n我们换个话题聊吧。',
       ui_hints: {}
     };
   }
@@ -245,32 +365,49 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
       ? '（用户开启了摄像头，请根据口型分析结果指导发音：先给一个具体的口型纠正建议，再带练一遍相关音。）'
       : '');
 
+  const directPhrase = directBeginnerPhraseReply(finalText);
+  if (directPhrase && !scenario) {
+    saveGuardedTurn(doc, finalText, directPhrase.display);
+    return { ...directPhrase, ui_hints: {}, errors: [], mastered: [], profile: doc.profile };
+  }
+
+  // 已核实曲库内的短歌词样例可确定性教学；其他歌曲交给联网链路处理。
+  // 只对本地已核实曲库命中的明确学歌请求走确定性回复；其他 K-pop 话题交给联网对话。
+  const songReply = songLibrary.songTeachReply(finalText, doc);
+  if (songReply) {
+    saveGuardedTurn(doc, finalText, songReply.display);
+    return { speech: songReply.speech, display: songReply.display, ui_hints: {}, errors: [], mastered: [], profile: doc.profile };
+  }
+
   computeDifficulty(doc); // 自适应难度：写入 profile.difficulty 供提示词执行
 
   const messages = [
-    { role: 'system', content: buildSystemPrompt(doc, visionNote, character, scenario) },
+    { role: 'system', content: buildSystemPrompt(doc, visionNote, character, scenario, finalText, songLibrary.buildSongSection(finalText, doc)) },
     ...doc.messages.slice(-8), // 控制上下文长度，保证响应速度
     { role: 'user', content: finalText }
   ];
 
-  const out = normalizeOut(await llm.chatJSON(messages));
-  const events = applyStatePatch(doc, out.state_patch || {});
+  const out = guardBeginnerTranslation(normalizeOut(await llm.chatJSON(messages)));
+  recordLearnerEvidence(doc, finalText);
+  applySelfReportedLevel(doc.profile, finalText);
+  const events = applyStatePatch(doc, out.state_patch || {}, { learnerText: finalText });
 
   // 学习统计采集（纯本地数据，供画像/报告/连胜使用）
   touchStats(doc, {
     turns: 1,
-    errors: ((out.state_patch || {}).errors || []).length,
+    errors: hasMeaningfulKorean(finalText) ? ((out.state_patch || {}).errors || []).length : 0,
     newWords: ((out.state_patch || {}).vocab_add || []).length
   });
 
   doc.messages.push({ role: 'user', content: finalText.slice(0, 600) });
-  doc.messages.push({ role: 'assistant', content: (out.display || out.speech || '').slice(0, 600) });
+  doc.messages.push({ role: 'assistant', content: (out.display || out.speech || '').slice(0, 600), sources: out.sources || [] });
   if (doc.messages.length > 24) doc.messages = doc.messages.slice(-24);
   store.saveUser(doc);
 
   return {
     speech: out.speech || '',
     display: out.display || out.speech || '',
+    sources: out.sources || [],
     ui_hints: out.ui_hints || {},
     errors: cardErrors(out.state_patch),
     mastered: events.mastered,
@@ -289,7 +426,8 @@ const DIFF_BY_LEVEL = { TOPIK1: 2, TOPIK2: 2, TOPIK3: 3, TOPIK4: 3, TOPIK5: 4, T
 function computeDifficulty(doc) {
   const p = doc.profile || {};
   const st = doc.stats || {};
-  let d = (p.level && DIFF_BY_LEVEL[p.level]) || 2;
+  const assessedLevel = p.assessment && p.assessment.status === 'assessed' ? p.level : '';
+  let d = (assessedLevel && DIFF_BY_LEVEL[assessedLevel]) || (p.self_reported_level === 'absolute_beginner' ? 1 : 2);
   const evidence = [];
 
   // 近 7 天正确率：正确率 = 1 - 纠错数/对话轮数（仅轮数充足时参与调整）
@@ -362,8 +500,8 @@ async function handleUpload({ userId, file, mode }) {
     } else {
       fs.unlink(file.path, () => {});
       return {
-        speech: '그 파일은 아직 못 읽어요. 사진이나 텍스트 파일로 보내 주세요!',
-        display: '📄 目前支持：图片（教材/菜单/路牌/歌词）和 txt / md / srt / lrc 文档。\n其他格式请先截图或转存后再发给我～',
+        speech: '사진이나 텍스트 파일로 보내 주세요. 请发送图片或文本文件。',
+        display: '📄 目前支持图片（教材、菜单、路牌、歌词）和 txt / md / srt / lrc 文档。其他格式请先截图或转成文本文件。\n사진이나 텍스트 파일로 보내 주세요.\n请发送图片或文本文件。',
         ui_hints: {}
       };
     }
@@ -372,8 +510,8 @@ async function handleUpload({ userId, file, mode }) {
 
   if (!material.trim()) {
     return {
-      speech: '죄송해요, 내용을 읽지 못했어요. 다시 보내 주실 수 있어요?',
-      display: '😵 没能识别出材料内容，换个更清晰的角度再拍一张试试？',
+      speech: '자료를 읽지 못했어요. 더 선명하게 찍어서 다시 보내 주실 수 있을까요? 我没能读出材料，可以拍清楚一些再发一次吗？',
+      display: '😵 没能识别出材料内容，可以换个更清晰的角度再拍一次吗？\n자료를 읽지 못했어요. 더 선명하게 찍어서 다시 보내 주실 수 있을까요?\n我没能读出材料，可以拍清楚一些再发一次吗？',
       ui_hints: {}
     };
   }
@@ -497,20 +635,41 @@ async function handleChatStream({ userId, text, channel, mode, characterId, scen
   const character = characters.personaPrompt(characterId);
 
   if (text && !(await security.checkText(text))) {
-    const msg = '😅 这条内容不太适合一起学习，我们聊点别的吧！다른 주제로 가요~';
+    const msg = '😅 这条内容不太适合一起学习，我们换个话题聊吧。\n다른 주제로 이야기해요.\n我们换个话题聊吧。';
     if (onDelta) onDelta(msg);
     return { speech: '', display: msg, state: {}, korean_sentences: [], errors: [], mastered: [] };
+  }
+
+  const directPhrase = directBeginnerPhraseReply(text);
+  if (directPhrase && !scenario) {
+    if (onDelta) onDelta(directPhrase.display);
+    saveGuardedTurn(doc, text, directPhrase.display);
+    return { ...directPhrase, state: {}, korean_sentences: ['어떡해요?'], errors: [], mastered: [], profile: doc.profile };
+  }
+  // 本地已核实曲目可走确定性回复；曲库外歌曲、韩剧台词和普通 K-pop 讨论交给联网对话。
+  const songReply = songLibrary.songTeachReply(text, doc);
+  if (songReply) {
+    if (onDelta) onDelta(songReply.display);
+    saveGuardedTurn(doc, text, songReply.display);
+    return { speech: songReply.speech, display: songReply.display, state: {}, korean_sentences: [], errors: [], mastered: [], profile: doc.profile };
   }
 
   computeDifficulty(doc); // 自适应难度
 
   const messages = [
-    { role: 'system', content: buildStreamSystemPrompt(doc, null, character, scenario) },
+    { role: 'system', content: buildStreamSystemPrompt(doc, null, character, scenario, text, songLibrary.buildSongSection(text, doc)) },
     ...doc.messages.slice(-8),
     { role: 'user', content: text }
   ];
 
-  const full = await llm.chatStream(messages, { maxTokens: 800, onDelta });
+  const sources = [];
+  const full = await llm.chatStream(messages, {
+    maxTokens: 800,
+    onDelta,
+    onSources: (found) => sources.splice(0, sources.length, ...(found || []))
+  });
+  recordLearnerEvidence(doc, text);
+  applySelfReportedLevel(doc.profile, text);
 
   // 剥离末尾状态行
   let display = full;
@@ -528,25 +687,30 @@ async function handleChatStream({ userId, text, channel, mode, characterId, scen
   // 兜底：模型把正文全部放进状态行之后等异常情况，保证 display 永不为空
   if (!display) display = full.replace(/@@STATE@@[^\n]*\n?/g, '').trim();
   if (!display) display = '（AI 没有返回内容，请重新发送试试）';
+  if (isSevereUntranslated(display)) {
+    display = '抱歉，我这次没能可靠地配好韩语和中文翻译。\n다시 확인할게요.\n我再确认一下，再给你准确的说法。';
+    state = {};
+  }
 
-  applyStatePatch(doc, state);
+  applyStatePatch(doc, state, { learnerText: text });
   const koreanSentences = extractKoreanSentences(display);
 
   // 学习统计采集
   touchStats(doc, {
     turns: 1,
-    errors: (state && state.errors || []).length,
+    errors: hasMeaningfulKorean(text) ? (state && state.errors || []).length : 0,
     newWords: (state && state.vocab_add || []).length
   });
 
   doc.messages.push({ role: 'user', content: String(text).slice(0, 600) });
-  doc.messages.push({ role: 'assistant', content: display.slice(0, 600) });
+  doc.messages.push({ role: 'assistant', content: display.slice(0, 600), sources });
   if (doc.messages.length > 24) doc.messages = doc.messages.slice(-24);
   store.saveUser(doc);
 
   return {
     speech: extractSpeech(display),
     display,
+    sources,
     state,
     errors: cardErrors(state),
     mastered: masteredEvents(doc, state),
@@ -685,8 +849,8 @@ async function handleScenarioEnd({ userId }) {
     '你是韩语情景对练的复盘评审员。请根据以下情景与对话记录，给出客观的结构化复盘。\n' +
     '场景：' + scene.name + '（' + scene.category + '），AI 角色：' + scene.ai_role + '，用户任务：' + scene.user_task + '，目标：' + scene.goal + '\n\n' +
     '对话记录（最近几轮）：\n' + (history || '（无记录）') + '\n\n' +
-    '评分标准：任务完成度 40% + 语言准确度 30% + 表达自然度 30%。\n' +
-    'highlights 写学生做得好的 2-3 点（具体，如「助词 에 用对了」）；improvements 写 2-3 条具体建议；summary 一句话总评（中文，40 字内）。\n' +
+    '评分标准：任务完成度 40% + 语言准确度 30% + 表达自然度 30%。只把确实影响含义或明显不自然的表达列为错误；符合场景的标准敬语不要要求用户改成更复杂或过度正式的说法。\n' +
+    'highlights 写学生做得好的 2-3 点；improvements 写 2-3 条具体、符合初学者水平的建议；summary 一句话总评（中文，40 字内）。任何韩语单词或短语后都紧跟中文释义，例如「하나（一个）」。\n' +
     '只输出一个 JSON 对象，不要任何其他文字：\n' +
     '{"score": 0到100的整数, "highlights": ["亮点1"], "improvements": ["改进1"], "summary": "一句话总评"}';
 
@@ -1367,4 +1531,4 @@ function getAbilities(userId) {
   };
 }
 
-module.exports = { handleChat, handleUpload, handlePronounce, handleChatStream, handleScenarioEnd, handleLessons, handleDramaQuotes, handleReport, handleDemoNext, handleDemoReset, handleSongAnalyze, handleSongSave, handleSongVocab, handleSongList, handleSongDelete, handleSongGet, archiveSession, extractKoreanSentences, applyStatePatch, normalizeOut, touchStats, recordPronEval, markPronMastered, getAbilities, computeScores, computeDifficulty };
+module.exports = { handleChat, handleUpload, handlePronounce, handleChatStream, handleScenarioEnd, handleLessons, handleDramaQuotes, handleReport, handleDemoNext, handleDemoReset, handleSongAnalyze, handleSongSave, handleSongVocab, handleSongList, handleSongDelete, handleSongGet, archiveSession, extractKoreanSentences, applyStatePatch, applySelfReportedLevel, candidateEvidenceTurns, normalizeOut, hasUntranslatedKoreanSentence, isSevereUntranslated, untranslatedKoreanStats, hasMeaningfulKorean, directBeginnerPhraseReply, recordLearnerEvidence, touchStats, recordPronEval, markPronMastered, getAbilities, computeScores, computeDifficulty };

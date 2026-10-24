@@ -20,7 +20,18 @@ function defaultUser(userId) {
       interests: [],
       level: '',
       korean_ratio: 0.3,
-      romanization: true
+      romanization: true,
+      romanization_policy: 'new_words',
+      self_reported_level: '',
+      assessment: {
+        status: 'not_assessed',
+        source: 'none',
+        confidence: 'low',
+        evidence_turns: 0,
+        assessed_at_evidence: 0,
+        updated_at: null,
+        basis: []
+      }
     },
     progress: {
       grammar_mastered: [],
@@ -53,7 +64,22 @@ function defaultUser(userId) {
 // 旧档案补齐新字段：保证所有落盘档案向下兼容、下游代码无需判空
 function normalize(doc) {
   const base = defaultUser(doc.userId);
+  const hadAssessment = doc.profile && doc.profile.assessment && typeof doc.profile.assessment === 'object';
   doc.profile = Object.assign({}, base.profile, doc.profile || {});
+  // 旧档案中的等级来源不可追溯，保留展示值但标成待核实，不冒充正式评估。
+  if (!hadAssessment) {
+    doc.profile.assessment = doc.profile.level
+      ? { ...base.profile.assessment, status: 'provisional', source: 'legacy', basis: ['历史等级缺少评估依据，待重新核实'] }
+      : { ...base.profile.assessment };
+  } else {
+    doc.profile.assessment = Object.assign({}, base.profile.assessment, doc.profile.assessment);
+    doc.profile.assessment.evidence_turns = Math.max(0, Number(doc.profile.assessment.evidence_turns) || 0);
+    doc.profile.assessment.assessed_at_evidence = Math.max(0, Number(doc.profile.assessment.assessed_at_evidence) || 0);
+    if (!Array.isArray(doc.profile.assessment.basis)) doc.profile.assessment.basis = [];
+  }
+  if (!['new_words', 'on_request'].includes(doc.profile.romanization_policy)) {
+    doc.profile.romanization_policy = doc.profile.romanization === false ? 'on_request' : 'new_words';
+  }
   const pr = doc.progress || {};
   doc.progress = Object.assign({}, base.progress, pr);
   for (const k of ['grammar_mastered', 'grammar_learning', 'vocab', 'error_log', 'weak_points', 'score_history', 'pron_eval_log', 'pron_mastered', 'quality_log', 'scenario_reports', 'song_lessons']) {
