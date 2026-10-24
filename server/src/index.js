@@ -14,6 +14,7 @@ const scenarios = require('./scenarios');
 const feedback = require('./feedback');
 const auth = require('./auth');
 const knowledge = require('./knowledge');
+const media = require('./media');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -282,6 +283,7 @@ app.post('/api/pronounce/mastered', (req, res) => {
 app.post('/api/song/analyze', upload.single('file'), async (req, res) => {
   try {
     let imageB64 = null;
+    let imageMime = null;
     let text = (req.body && req.body.text) || '';
     const source = (req.body && req.body.source) || '';
     const file = req.file;
@@ -290,8 +292,13 @@ app.post('/api/song/analyze', upload.single('file'), async (req, res) => {
     const isTextFile = !!(file && ext === '.lrc');
     let songMeta = null;
 
+    let songTemp = null; // media.js 归一化产生的临时 JPEG
     if (isImage) {
-      imageB64 = fs.readFileSync(file.path).toString('base64');
+      // 低分辨率歌词图直接进 VLM 会被误读，先上采样 + 统一 JPEG
+      const norm = await media.normalizeImageForVLM(file.path);
+      songTemp = norm.path !== file.path ? norm.path : null;
+      imageB64 = fs.readFileSync(norm.path).toString('base64');
+      imageMime = norm.mime;
     } else if (file && isTextFile) {
       // LRC 先在服务端去除时间戳/元数据，再把纯歌词原文交给 AI，避免模型把标签当歌词。
       const lrc = fs.readFileSync(file.path, 'utf8').replace(/^\uFEFF/, '');
@@ -316,13 +323,15 @@ app.post('/api/song/analyze', upload.single('file'), async (req, res) => {
       text,
       imageB64,
       source: source || (isImage ? 'image' : (isTextFile ? 'lrc' : 'paste')),
-      songMeta
+      songMeta,
+      imageMime
     });
     res.json(out);
   } catch (e) {
     console.error('[song/analyze]', e.message);
     res.status(500).json({ error: e.message });
   } finally {
+    if (songTemp) media.cleanup(songTemp);
     if (req.file) fs.unlink(req.file.path, () => {});
   }
 });
@@ -498,6 +507,10 @@ app.get('*', (req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
+  // multer 超限：multer 抛 MulterError(LIMIT_FILE_SIZE)，裸的英文 "File too large" 对用户不友好
+  if (err && (err.code === 'LIMIT_FILE_SIZE' || err.message === 'File too large')) {
+    return res.status(413).json({ error: '文件太大：学习素材上限 10MB、头像 3MB，请压缩后再上传' });
+  }
   console.error('[server]', err);
   res.status(500).json({ error: err.message });
 });

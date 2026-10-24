@@ -637,13 +637,15 @@ function doUpload(file, kind) {
   pushMessage('user', kind === 'image' ? '📎 [图片]' : '📎 [文档]');
   const pendingId = pushMessage('assistant', '', { pending: true });
   state.status = 'typing';
-  uploadFile('/api/upload', file, { userId: currentUid() })
+  // 上传是 VLM + 对话两级模型调用，排队时可能超过默认 120s，放宽到 180s
+  uploadFile('/api/upload', file, { userId: currentUid() }, 180000)
     .then((res) => {
       replaceMessage(pendingId, res.display || '(未识别到内容)', res.speech);
       state.status = 'listening';
     })
-    .catch(() => {
-      replaceMessage(pendingId, '😵 文件处理失败，请重试。');
+    .catch((e) => {
+      // 服务端已给友好文案（文件太大/限流等），透传给用户而不是笼统的"处理失败"
+      replaceMessage(pendingId, '😵 ' + ((e && e.message) || '文件处理失败，请重试。'));
       state.status = 'listening';
     });
 }

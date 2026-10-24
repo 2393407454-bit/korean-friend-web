@@ -509,14 +509,21 @@ async function chatStream(messages, { temperature, maxTokens, onDelta, onSources
   throw lastErr || new Error('LLM 流式调用失败');
 }
 
-async function visionCall(content, maxTokens) {
-  const body = { model: VISION_MODEL, messages: [{ role: 'user', content }] };
+// data URL 统一入口：mime 由调用方按真实文件类型传入，杜绝把 PNG 字节标成 jpeg
+function imageDataUrl(base64, mime) {
+  return 'data:' + (mime || 'image/jpeg') + ';base64,' + base64;
+}
+
+// 视觉调用默认低温度：提取/OCR 任务要的是逐字转写的稳定性，
+// 默认温度(1.0)下同一张图每次会漂移出不同的幻觉内容（实测）。
+async function visionCall(content, maxTokens, { temperature = 0.2 } = {}) {
+  const body = { model: VISION_MODEL, messages: [{ role: 'user', content }], temperature };
   if (noThinking(VISION_MODEL)) body.thinking = { type: 'disabled' };
   return createWithRetry(body, maxTokens || 700);
 }
 
 // 视觉：一次调用直接返回 K-pop 学歌所需的结构化 JSON，避免「先 OCR、再 LLM」两次排队。
-async function analyzeSongImage(base64, maxLines) {
+async function analyzeSongImage(base64, maxLines, mime) {
   if (!LLM.apiKey) return '';
   const lineLimit = maxLines || 24;
   return visionCall([
@@ -528,12 +535,12 @@ async function analyzeSongImage(base64, maxLines) {
         '规则：只分析图片中实际出现的内容，不要根据歌名、歌手、零散歌词或常识猜测歌曲，也不要补写图片外的歌词；图片没有出现歌名/歌手时 candidates 必须为空数组；不要把图片外的副歌或下一句加入 lines；按图片从上到下输出最多 ' + lineLimit + ' 句。' +
         '每句必须填写 romanization、translation、grammar、vocab；vocab 只能选自该句，语法只解释该句；summary 只总结图片中实际出现的内容；看不清的字不要猜，直接跳过该句。'
     },
-    { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + base64 } }
+    { type: 'image_url', image_url: { url: imageDataUrl(base64, mime) } }
   ], 1200);
 }
 
 // 视觉：口型/表情分析（视频通道）
-async function analyzeFrame(base64) {
+async function analyzeFrame(base64, mime) {
   if (!LLM.apiKey) return '（演示模式：未配置视觉模型，跳过口型分析）';
   return visionCall([
     {
@@ -541,21 +548,44 @@ async function analyzeFrame(base64) {
       text:
         '这是一位韩语学习者对着摄像头说韩语的一帧画面。请只从发音教学角度分析：1) 口型（开口度、是否圆唇、嘴角是否平展）；2) 表情状态（困惑/自信/疲劳）。输出中文，60 字以内，不评价外貌。'
     },
-    { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + base64 } }
+    { type: 'image_url', image_url: { url: imageDataUrl(base64, mime) } }
   ]);
 }
 
-// 视觉：图片材料 OCR + 教学材料提取（文件上传）
-async function analyzeImage(base64) {
+// 视觉：图片材料 OCR + 教学材料提取（文件上传）。
+// 两轮策略：首轮逐字转写 → 第二轮把首轮转写交回模型对照原图校对（OCR 自一致性，
+// 显著修正ㅓ/ㅗ、ㅐ/ㅔ、松紧音类同形误读）。两轮都取低温度；校对轮失败则用首轮结果。
+// 防幻觉约束：只转写清晰可见的文字，看不清就跳过并如实说明，禁止编造来源。
+async function analyzeImage(base64, mime) {
   if (!LLM.apiKey) return '（演示模式：未配置视觉模型，无法识别图片内容）';
-  return visionCall([
+  const first = await visionCall([
     {
       type: 'text',
       text:
-        '请完整提取这张图片中的韩文内容（若是菜单/路牌/歌词/教材页面，保留原文与排版顺序），在每句韩文后附中文翻译。只输出提取与翻译结果，不要额外讲解。'
+        '请完整提取这张图片中的韩文内容（若是菜单/路牌/歌词/教材页面，保留原文与排版顺序），在每句韩文后附中文翻译。只输出提取与翻译结果，不要额外讲解。' +
+        '规则：只转写图片中清晰可见的文字并逐字照抄，不要改写、翻译腔改写或补写图片中不存在的内容；' +
+        '看不清的字不要猜，跳过该处并在最后如实说明哪一部分无法辨认；' +
+        '不要根据内容推断或编造来源（如"这是笔记/歌词/某首歌"），图片里没有写来源就不要提。'
     },
-    { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,' + base64 } }
+    { type: 'image_url', image_url: { url: imageDataUrl(base64, mime) } }
   ]);
+  if (!first || !String(first).trim()) return first;
+  try {
+    const corrected = await visionCall([
+      {
+        type: 'text',
+        text:
+          '下面是对这张图片中韩文内容的一次初步转写，其中可能有形近字误读（如 ㅓ/ㅗ、ㅐ/ㅔ、松音/紧音、안/노 等）。' +
+          '请逐字对照图片校对这份转写：只修正与图片明显不符的字符，保持原有的换行、顺序与翻译；不要增删图片里没有的内容。' +
+          '输出校对后的完整结果（韩文原文+中文翻译），不要任何解释。\n\n初步转写：\n' + String(first).slice(0, 1200)
+      },
+      { type: 'image_url', image_url: { url: imageDataUrl(base64, mime) } }
+    ]);
+    return corrected && String(corrected).trim() ? corrected : first;
+  } catch (e) {
+    console.warn('[vision] 校对轮失败，采用首轮提取：', e.message);
+    return first;
+  }
 }
 
 // 韩语语音识别（微信同声传译插件不支持韩语，必须走这里）

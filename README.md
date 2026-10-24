@@ -48,7 +48,7 @@ npm start
 | 能力 | 推荐方案 | 说明 |
 |---|---|---|
 | LLM 大脑 | 智谱 GLM（open.bigmodel.cn）| `glm-4.5-flash` 免费且指令遵从度好（实测 glm-4-flash 教学合规性差，勿用）；关闭思考模式保证响应速度 |
-| 图片 OCR/教材理解 | 同上 | `glm-4.5v` 免费且韩文 OCR 准确（实测 glm-4v-flash 幻觉严重，勿用） |
+| 图片 OCR/教材理解 | 同上 | `glm-4.6v-flash` 免费且韩文 OCR 相对准确（实测 glm-4v-flash 幻觉严重，勿用）。上传图片会先经 `server/src/media.js` 归一化：小图上采样到长边 1400+ 锐化、统一转 JPEG（低分辨率文字图直接进 VLM 会被误读），提取走「转写→对照原图校对」两轮 + 低温度，把免费模型的词级误读压到最低；教材类清晰照片表现最好 |
 | 韩语语音识别 ASR | 同上 | `glm-asr-2512` 免费额度可用，与 LLM 同一个 Key，实测韩语识别准确 |
 | 韩语语音合成 TTS | **Edge-TTS（默认已接入，免费无 Key）**，韩文段 `ko-KR-SunHiNeural`、中文段 `zh-CN-XiaoxiaoNeural`（自动分段拼接，汉字中文发音、韩文韩语发音），语速可调；备选 glm-tts（需充值）/ SiliconFlow CosyVoice2 / macOS say（仅开发机） | Edge-TTS 服务端运行，手机真机同样可用 |
 

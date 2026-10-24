@@ -217,12 +217,13 @@ function analyze({ file, text, source }) {
     data.step = 'confirm';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  const fail = () => {
+  const fail = (e) => {
     data.analyzing = false;
     data.analyzeMode = '';
-    data.analyzeError = '分析失败，请检查网络后重试';
+    data.analyzeError = (e && e.message) || '分析失败，请检查网络后重试';
   };
-  if (file) uploadFile('/api/song/analyze', file, { source }).then(ok).catch(fail);
+  // 图片/LRC 分析同样可能遇到模型排队，放宽到 180s
+  if (file) uploadFile('/api/song/analyze', file, { source }, 180000).then(ok).catch(fail);
   else post('/api/song/analyze', { text, source: source || 'paste' }).then(ok).catch(fail);
 }
 

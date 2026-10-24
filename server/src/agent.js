@@ -10,6 +10,7 @@ const { buildSystemPrompt, buildStreamSystemPrompt } = require('./system-prompt'
 const songLibrary = require('./song-library');
 const security = require('./security');
 const tools = require('./tools');
+const media = require('./media');
 
 const SRS_DAYS = [1, 3, 7, 14]; // 间隔复习：1/3/7/14 天
 const LEVEL_RATIO = { TOPIK1: 0.3, TOPIK2: 0.3, TOPIK3: 0.6, TOPIK4: 0.6, TOPIK5: 0.9, TOPIK6: 0.9 };
@@ -350,7 +351,7 @@ function guardBeginnerTranslation(out) {
   return { ...out, display: TRANSLATION_GUARD_APOLOGY, speech: TRANSLATION_GUARD_APOLOGY, state_patch: {}, errors: [], mastered: [], korean_sentences: [] };
 }
 
-async function handleChat({ userId, text, channel, mode, frameBase64, characterId, scenarioId }) {
+async function handleChat({ userId, text, channel, mode, frameBase64, characterId, scenarioId, fromUpload }) {
   const doc = store.loadUser(userId);
   doc.session = doc.session || {};
   doc.session.channel = channel || 'text';
@@ -378,7 +379,9 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
       ? '（用户开启了摄像头，请根据口型分析结果指导发音：先给一个具体的口型纠正建议，再带练一遍相关音。）'
       : '');
 
-  const directPhrase = directBeginnerPhraseReply(finalText);
+  // 确定性捷径只服务普通聊天；文件上传走教材精讲链路，
+  // 否则材料里出现「노래/歌词」等词会被歌词曲库劫持，用户的真实材料反而被忽略（实测 bug）
+  const directPhrase = fromUpload ? null : directBeginnerPhraseReply(finalText);
   if (directPhrase && !scenario) {
     saveGuardedTurn(doc, finalText, directPhrase.display);
     return { ...directPhrase, ui_hints: {}, errors: [], mastered: [], profile: doc.profile };
@@ -386,7 +389,7 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
 
   // 已核实曲库内的短歌词样例可确定性教学；其他歌曲交给联网链路处理。
   // 只对本地已核实曲库命中的明确学歌请求走确定性回复；其他 K-pop 话题交给联网对话。
-  const songReply = songLibrary.songTeachReply(finalText, doc);
+  const songReply = fromUpload ? null : songLibrary.songTeachReply(finalText, doc);
   if (songReply) {
     saveGuardedTurn(doc, finalText, songReply.display);
     return { speech: songReply.speech, display: songReply.display, ui_hints: {}, errors: [], mastered: [], profile: doc.profile };
@@ -513,24 +516,32 @@ async function handleUpload({ userId, file, mode }) {
   const doc = store.loadUser(userId);
   let material = '';
   const isImage = file && /^image\//.test(file.mimetype || '');
+  let vlmTemp = null; // media.js 归一化产生的临时 JPEG
 
-  if (isImage) {
-    const b64 = fs.readFileSync(file.path).toString('base64');
-    material = await llm.analyzeImage(b64);
-  } else if (file) {
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    if (['.txt', '.md', '.srt', '.lrc'].includes(ext)) {
-      material = fs.readFileSync(file.path, 'utf8').slice(0, 12000);
-    } else {
-      fs.unlink(file.path, () => {});
-      return {
-        speech: '사진이나 텍스트 파일로 보내 주세요. 请发送图片或文本文件。',
-        display: '📄 目前支持图片（教材、菜单、路牌、歌词）和 txt / md / srt / lrc 文档。其他格式请先截图或转成文本文件。\n사진이나 텍스트 파일로 보내 주세요.\n请发送图片或文本文件。',
-        ui_hints: {}
-      };
+  try {
+    if (isImage) {
+      // 低分辨率文字图直接进 VLM 会被误读（实测 36px 字号稳定幻觉），先上采样+统一 JPEG
+      const norm = await media.normalizeImageForVLM(file.path);
+      vlmTemp = norm.path !== file.path ? norm.path : null;
+      const b64 = fs.readFileSync(norm.path).toString('base64');
+      material = await llm.analyzeImage(b64, norm.mime);
+    } else if (file) {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      if (['.txt', '.md', '.srt', '.lrc'].includes(ext)) {
+        material = fs.readFileSync(file.path, 'utf8').slice(0, 12000);
+      } else {
+        return {
+          speech: '사진이나 텍스트 파일로 보내 주세요. 请发送图片或文本文件。',
+          display: '📄 目前支持图片（教材、菜单、路牌、歌词）和 txt / md / srt / lrc 文档。其他格式请先截图或转成文本文件。\n사진이나 텍스트 파일로 보내 주세요.\n请发送图片或文本文件。',
+          ui_hints: {}
+        };
+      }
     }
+  } finally {
+    // 成功/失败/早退都清理：VLM 中间文件 + 原始上传（unlink 幂等，失败静默）
+    if (vlmTemp) media.cleanup(vlmTemp);
+    if (file) fs.unlink(file.path, () => {});
   }
-  if (file) fs.unlink(file.path, () => {});
 
   if (!material.trim()) {
     return {
@@ -548,6 +559,7 @@ async function handleUpload({ userId, file, mode }) {
     userId,
     channel: 'text',
     mode: mode || '教材精讲',
+    fromUpload: true,
     text: '[用户上传了' + label + ']\n材料内容如下：\n' + material
   });
 }
@@ -1294,7 +1306,7 @@ async function enrichSongParsed(parsed) {
 }
 
 // 分析歌词：图片由 VLM 一次性输出结构化结果，文本由 LLM 输出；不落库（等待用户确认歌名）。
-async function handleSongAnalyze({ text, imageB64, source, songMeta }) {
+async function handleSongAnalyze({ text, imageB64, source, songMeta, imageMime }) {
   const inputSource = source || (imageB64 ? 'image' : 'paste');
   let raw = clampStr(text || '', 12000);
   let parsed = null;
@@ -1303,7 +1315,7 @@ async function handleSongAnalyze({ text, imageB64, source, songMeta }) {
   // 这会少一次模型排队和一次完整输出传输，是图片分析提速的主要来源。
   if (imageB64) {
     try {
-      const out = await llm.analyzeSongImage(imageB64, SONG_MAX_LINES);
+      const out = await llm.analyzeSongImage(imageB64, SONG_MAX_LINES, imageMime);
       parsed = llm.extractJSON(out);
     } catch (e) {
       console.warn('[song] VLM 结构化分析失败，回退 OCR：', e.message);
@@ -1312,7 +1324,7 @@ async function handleSongAnalyze({ text, imageB64, source, songMeta }) {
     if (!parsed || !Array.isArray(parsed.lines) || !parsed.lines.length) {
       parsed = null;
       try {
-        raw = (await llm.analyzeImage(imageB64)).trim();
+        raw = (await llm.analyzeImage(imageB64, imageMime)).trim();
       } catch (e) {
         console.warn('[song] 图片 OCR 失败：', e.message);
       }
