@@ -1363,12 +1363,14 @@ async function handleSongAnalyze({ text, imageB64, source, songMeta, imageMime }
       console.warn('[song] LLM 歌词分析失败：', e.message);
     }
   }
-  // 兜底：模型没给结构化结果时，按行切分韩文原文（罗马音/翻译留空，前端只展示可跟读的原文）
+  // 兜底：模型没给结构化结果时，按行切分韩文原文（罗马音/翻译留空，前端只展示可跟读的原文）。
+  // LRC 元数据标记行（【LRC 元数据…】/歌名:/歌手:）不是歌词，不能混进兜底歌词卡（实测混入过）
   if (!parsed || !Array.isArray(parsed.lines) || !parsed.lines.length) {
     parsed = {
       candidates: [],
       lines: raw
         .split(/\n+/)
+        .filter((s) => !/^\s*【/.test(s) && !/^\s*(歌名|歌手)\s*[:：]/.test(s))
         .map((s) => ({ ko: clampStr(s, 80), romanization: '', translation: '', grammar: '', vocab: [] }))
         .filter((l) => l.ko && /[\uAC00-\uD7A3]/.test(l.ko))
         .slice(0, SONG_MAX_LINES)
