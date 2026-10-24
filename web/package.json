@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "pinia": "^4.1.0",
     "vue": "^3.4.27",
     "vue-router": "^4.3.2"
   },

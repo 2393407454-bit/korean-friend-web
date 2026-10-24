@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { isLogged } from '../utils/storage';
+import { useAuthStore } from '../stores/auth';
 
 // tab 页：home/chat/pronunciation/quotes/profile（对应小程序 tabBar）
 // song 为二级页（对应 wx.navigateTo）；login 公开，其余一律登录后可见
@@ -21,8 +21,10 @@ const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  if (!to.meta.public && !isLogged()) return '/login';
-  if (to.path === '/login' && isLogged()) return '/home';
+  const auth = useAuthStore();
+  auth.bootstrap(); // 首次导航时从 localStorage 恢复会话
+  if (!to.meta.public && !auth.isLogged) return '/login';
+  if (to.path === '/login' && auth.isLogged) return '/home';
   return true;
 });
 

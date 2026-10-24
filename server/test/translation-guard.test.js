@@ -50,9 +50,12 @@ test('stream path falls back to the apology only when the retry also fails', asy
 
 test('non-stream path self-heals via chatJSON retry before the apology guard', async () => {
   const origJSON = llm.chatJSON;
+  const origJSONTools = llm.chatJSONWithTools;
   const origCheck = security.checkText;
   const calls = [];
   security.checkText = async () => true;
+  // Agent 工具链路的首次调用也要走同一个 mock，保证重试次数断言不受影响
+  llm.chatJSONWithTools = async (messages) => llm.chatJSON(messages);
   llm.chatJSON = async (messages) => {
     calls.push(messages);
     if (calls.length === 1) return { display: BAD, state_patch: {} };
@@ -66,6 +69,7 @@ test('non-stream path self-heals via chatJSON retry before the apology guard', a
     assert.doesNotMatch(out.display, /抱歉/);
   } finally {
     llm.chatJSON = origJSON;
+    llm.chatJSONWithTools = origJSONTools;
     security.checkText = origCheck;
   }
 });

@@ -13,6 +13,14 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        // 第三方依赖单独成 vendor chunk：业务代码迭代时用户无需重新下载框架代码（长缓存）
+        manualChunks(id) {
+          if (id.includes('node_modules')) return 'vendor';
+        }
+      }
+    }
   }
 });

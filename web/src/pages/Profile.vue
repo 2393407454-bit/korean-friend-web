@@ -4,11 +4,13 @@
 import { onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { get, post, uploadFile } from '../api/client';
-import { currentUid, storeGet, storeSet, clearSession } from '../utils/storage';
+import { currentUid, storeGet, storeSet } from '../utils/storage';
+import { useAuthStore } from '../stores/auth';
 import { showToast } from '../utils/ui';
 import ConfirmModal from '../components/ConfirmModal.vue';
 
 const router = useRouter();
+const auth = useAuthStore();
 
 const GOAL_TEXT = {
   kpop: '追星',
@@ -53,7 +55,7 @@ const statInfo = ref(null); // { title, value, tip }
 
 function onLogoutConfirm() {
   logoutVisible.value = false;
-  clearSession();
+  auth.logout();
   router.push('/login');
 }
 

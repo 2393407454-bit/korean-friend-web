@@ -3,9 +3,10 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { post } from '../api/client';
-import { setSession } from '../utils/storage';
+import { useAuthStore } from '../stores/auth';
 
 const router = useRouter();
+const auth = useAuthStore();
 
 const mode = ref('login'); // login | register
 const username = ref('');
@@ -61,7 +62,7 @@ async function submit() {
   try {
     const url = mode.value === 'register' ? '/api/auth/register' : '/api/auth/login';
     const res = await post(url, { username: name, password: pwd });
-    setSession({ token: res.token, userId: res.userId, username: res.username });
+    auth.signIn(res);
     router.push('/home');
   } catch (e) {
     error.value = e.message || '请求失败，请稍后再试';

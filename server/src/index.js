@@ -13,6 +13,7 @@ const characters = require('./characters');
 const scenarios = require('./scenarios');
 const feedback = require('./feedback');
 const auth = require('./auth');
+const knowledge = require('./knowledge');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -65,6 +66,20 @@ app.get('/api/health', (req, res) => {
   res.json(llm.caps());
 });
 
+// RAG 知识库状态与检索调试端点（答辩/演示用：能看到检索模式与命中依据）
+app.get('/api/rag/status', (req, res) => {
+  res.json(knowledge.status());
+});
+app.post('/api/rag/search', async (req, res) => {
+  try {
+    const query = String((req.body && req.body.query) || '').trim();
+    if (!query) return res.status(400).json({ error: 'query required' });
+    res.json(await knowledge.search(query, { topK: Math.min(Number((req.body || {}).topK) || 4, 8) }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/session', async (req, res) => {
   const { code, deviceId } = req.body || {};
   try {
@@ -110,9 +125,10 @@ app.post('/api/chat/stream', async (req, res) => {
   try {
     const final = await agent.handleChatStream({
       userId, text, channel: channel || 'text', mode, characterId, scenarioId,
-      onDelta: (d) => send({ t: d })
+      onDelta: (d) => send({ t: d }),
+      onTool: (e) => send({ tool: e })
     });
-    send({ done: true, display: final.display, speech: final.speech, sources: final.sources || [], korean_sentences: final.korean_sentences, errors: final.errors, mastered: final.mastered, profile: final.profile });
+    send({ done: true, display: final.display, speech: final.speech, sources: final.sources || [], tools_used: final.tools_used || [], korean_sentences: final.korean_sentences, errors: final.errors, mastered: final.mastered, profile: final.profile });
   } catch (e) {
     console.error('[chat/stream]', e.message);
     send({ error: e.status === 429 ? e.message : '服务开小差了：' + e.message });
@@ -508,6 +524,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     for (const ip of ips) console.log(`  http://${ip}:${PORT}`);
   }
   console.log('caps:', JSON.stringify(llm.caps()));
+  // RAG 向量索引：缺失或语料已更新时后台重建（不阻塞启动，失败自动退关键词检索）
+  knowledge.ensureIndexAsync();
 });
 server.on('error', (err) => {
   if (err && err.code === 'EADDRINUSE') {

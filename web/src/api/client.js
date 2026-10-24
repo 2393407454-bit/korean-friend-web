@@ -7,7 +7,13 @@ const BASE = import.meta.env.VITE_API_BASE || '';
 const TIMEOUT = 120000;
 
 function onUnauthorized() {
-  clearSession();
+  // 同步清掉 Pinia 登录态（未挂载 Pinia 时退回直接清 storage）
+  try {
+    // 动态引入避免模块加载期循环依赖
+    import('../stores/auth').then((m) => m.useAuthStore().logout()).catch(() => clearSession());
+  } catch (e) {
+    clearSession();
+  }
   // 动态引入避免与 router 循环依赖；会话过期回到登录页
   import('../router').then((m) => m.default.push('/login')).catch(() => {
     window.location.href = '/login';

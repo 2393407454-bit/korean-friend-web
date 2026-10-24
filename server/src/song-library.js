@@ -156,4 +156,13 @@ function buildSongSection(text, doc) {
   ].join('\n');
 }
 
-module.exports = { buildSongSection, songTeachReply, isSongRequest: (t) => TRIGGER_RE.test(String(t || '')) };
+// 供 Function Calling 工具复用：按歌名/别名/歌手正则找曲库歌曲（与教学触发同一套别名知识）
+function matchSongs(text) {
+  const raw = String(text || '');
+  const hits = matchedSongs(raw);
+  if (hits.length) return hits;
+  const artistHit = ARTIST_MAP.find((m) => m.re.test(raw));
+  return artistHit ? [SONGS.find((s) => s.id === artistHit.id)].filter(Boolean) : [];
+}
+
+module.exports = { buildSongSection, songTeachReply, matchSongs, isSongRequest: (t) => TRIGGER_RE.test(String(t || '')) };

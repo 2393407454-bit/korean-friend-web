@@ -193,13 +193,14 @@ function releaseSlot() {
   if (next) next();
 }
 
-async function createWithRetry(body, maxTokens, { includeSearchSources = false } = {}) {
+async function createWithRetry(body, maxTokens, { includeSearchSources = false, fullResponse = false } = {}) {
   body.max_tokens = maxTokens;
   let lastErr = null;
   for (let attempt = 0; attempt <= 2; attempt++) {
     await acquireSlot();
     try {
       const res = await client(LLM.baseURL, LLM.apiKey).chat.completions.create(body);
+      if (fullResponse) return res;
       const message = res.choices && res.choices[0] && res.choices[0].message;
       const content = (message && message.content) || '';
       return includeSearchSources
@@ -289,9 +290,98 @@ async function chatJSON(messages) {
   return { speech: text.slice(0, 300), display: text, state_patch: {}, ui_hints: {}, sources };
 }
 
+/* =========================================================
+   Function Calling 工具循环（Agent 模式）
+   把知识库检索 / 曲库 / 生词本暴露成 function tools，由模型自主决定
+   调用与参数；工具结果回填后继续生成。模型或网关不支持 tools 时
+   自动降级为无工具调用，线上行为永远有兜底。
+   ========================================================= */
+const TOOLS_ON = !['false', '0', 'off', 'no'].includes(String(process.env.AI_TOOLS || 'true').toLowerCase());
+const MAX_TOOL_ROUNDS = 3;
+
+function getFunctionTools() {
+  // 延迟加载避免与 tools.js 互相 require 成环（tools.js → knowledge.js → llm.js）
+  return require('./tools').getFunctionDefs();
+}
+
+// embedding 客户端：RAG 语料索引与查询向量统一走这里
+async function embedTexts(texts, model, dimensions) {
+  if (!LLM.apiKey) throw new Error('未配置 LLM_API_KEY，无法生成向量');
+  const res = await client(LLM.baseURL, LLM.apiKey).embeddings.create({
+    model: model || 'embedding-3',
+    input: texts,
+    ...(dimensions ? { dimensions } : {})
+  });
+  const vectors = ((res && res.data) || []).map((d) => d && d.embedding);
+  if (vectors.length !== texts.length || !vectors.every(Array.isArray)) {
+    throw new Error('向量返回结构异常');
+  }
+  return vectors;
+}
+
+async function chatJSONWithTools(messages, ctx, { onToolEvent } = {}) {
+  if (!LLM.apiKey || !TOOLS_ON) {
+    const base = await chatJSON(messages);
+    return base;
+  }
+  const funcTools = getFunctionTools();
+  const shouldSearch = WEB_SEARCH && needsSearch(messages);
+  const chatMessages = messages.slice();
+  let toolsDropped = false;
+
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    const includeTools = !toolsDropped && round < MAX_TOOL_ROUNDS;
+    const body = {
+      model: LLM.model,
+      messages: chatMessages,
+      temperature: 0.7
+    };
+    if (noThinking(LLM.model)) body.thinking = { type: 'disabled' };
+    if (includeTools) {
+      body.tools = shouldSearch ? funcTools.concat(webSearchTool()) : funcTools;
+      body.tool_choice = 'auto';
+    }
+
+    let res;
+    try {
+      res = await createWithRetry(body, 1100, { fullResponse: true });
+    } catch (e) {
+      // tools 不被支持（400/404/422 等）→ 摘掉工具整体重试；429 属限流直接上抛
+      if (!includeTools || (e && e.status) === 429) throw e;
+      toolsDropped = true;
+      continue;
+    }
+
+    const message = res.choices && res.choices[0] && res.choices[0].message;
+    const toolCalls = message && Array.isArray(message.tool_calls) ? message.tool_calls : [];
+    if (toolCalls.length && includeTools) {
+      chatMessages.push({ role: 'assistant', content: message.content || '', tool_calls: toolCalls });
+      for (const tc of toolCalls) {
+        const out = await require('./tools').executeCall(tc, ctx || {});
+        if (onToolEvent) {
+          try { onToolEvent({ name: out.name, label: out.label, ok: out.ok }); } catch (e) { /* 回调异常不中断 */ }
+        }
+        chatMessages.push({ role: 'tool', tool_call_id: tc.id, content: out.result });
+      }
+      continue;
+    }
+
+    const text = (message && message.content) || '';
+    const sources = searchSourcesFromMessage(message);
+    const parsed = extractJSON(text);
+    if (parsed && (parsed.speech || parsed.display)) return { ...parsed, sources };
+    return { speech: text.slice(0, 300), display: text, state_patch: {}, ui_hints: {}, sources };
+  }
+
+  // 工具轮次用尽仍没拿到正式回复：摘掉 tools 直接要最终答案
+  return chatJSON(messages);
+}
+
 // 流式对话：逐增量回调 onDelta，返回完整文本。
 // 首块未产出前的 429/5xx 会自动重试；已开始输出后的失败直接抛出（前端保留已收文本）。
-async function chatStream(messages, { temperature, maxTokens, onDelta, onSources } = {}) {
+// Agent 模式：传入 tools（function tools）后进入工具循环——模型先调工具拿资料，
+// 有内容增量才开始向 onDelta 转发；工具轮次有上限，异常时摘掉工具兜底。
+async function chatStream(messages, { temperature, maxTokens, onDelta, onSources, tools, ctx, onToolEvent } = {}) {
   if (!LLM.apiKey) {
     const mock = mockChat((messages.find((m) => m.role === 'user') || {}).content || '');
     const parsed = extractJSON(mock);
@@ -299,41 +389,88 @@ async function chatStream(messages, { temperature, maxTokens, onDelta, onSources
     if (onDelta) onDelta(text);
     return text;
   }
+  const funcTools = TOOLS_ON && tools && tools.length ? tools : null;
   const shouldSearch = WEB_SEARCH && needsSearch(messages);
   let searchFallbackUsed = false;
+  let toolsDropped = false;
+  let toolRounds = 0;
+  const chatMessages = messages.slice();
+
   const buildBody = () => {
+    const includeTools = funcTools && !toolsDropped && !searchFallbackUsed && toolRounds < MAX_TOOL_ROUNDS;
     const body = {
       model: LLM.model,
-      messages: searchFallbackUsed ? addSearchUnavailableContext(messages) : messages,
+      messages: searchFallbackUsed ? addSearchUnavailableContext(chatMessages) : chatMessages,
       stream: true,
       temperature: temperature == null ? 0.7 : temperature,
       max_tokens: maxTokens || 800 // 不设会导致回复长度不受控、流式时间被拉长
     };
     if (noThinking(LLM.model)) body.thinking = { type: 'disabled' };
     // 对话主链路按需开启联网搜索：消息含时效/事实关键词才挂搜索工具
-    if (shouldSearch && !searchFallbackUsed) body.tools = webSearchTool();
+    if (includeTools || (shouldSearch && !searchFallbackUsed)) {
+      body.tools = [];
+      if (includeTools) body.tools = body.tools.concat(funcTools);
+      if (shouldSearch && !searchFallbackUsed) body.tools = body.tools.concat(webSearchTool());
+      body.tool_choice = 'auto';
+    }
     return body;
   };
 
   const foundSources = new Map();
 
   let lastErr = null;
-  for (let attempt = 0; attempt <= 2; attempt++) {
+  let attempt = 0;
+  while (attempt <= 2) {
     await acquireSlot();
     let emitted = false;
     let full = '';
+    const toolCallsAcc = new Map(); // index -> {id, name, arguments}
     try {
       const stream = await client(LLM.baseURL, LLM.apiKey).chat.completions.create(buildBody());
       for await (const chunk of stream) {
         for (const source of searchSourcesFromChunk(chunk)) foundSources.set(source.url, source);
-        const delta = (chunk.choices && chunk.choices[0] && chunk.choices[0].delta && chunk.choices[0].delta.content) || '';
-        if (delta) {
-          emitted = true;
-          full += delta;
-          if (onDelta) {
-            try { onDelta(delta); } catch (e) { /* 回调异常不中断流 */ }
+        const choice = chunk.choices && chunk.choices[0];
+        const delta = (choice && choice.delta) || {};
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const slot = toolCallsAcc.get(tc.index) || { id: '', name: '', arguments: '' };
+            if (tc.id) slot.id = tc.id;
+            if (tc.function && tc.function.name) slot.name = tc.function.name;
+            if (tc.function && tc.function.arguments) slot.arguments += tc.function.arguments;
+            toolCallsAcc.set(tc.index, slot);
           }
         }
+        const deltaText = delta.content || '';
+        if (deltaText) {
+          emitted = true;
+          full += deltaText;
+          if (onDelta) {
+            try { onDelta(deltaText); } catch (e) { /* 回调异常不中断流 */ }
+          }
+        }
+      }
+      // 本轮只产出了工具调用（还没有正文）→ 执行工具、回填结果、继续下一轮
+      const wantsTools = toolCallsAcc.size && !emitted && funcTools && !toolsDropped;
+      if (wantsTools && toolRounds < MAX_TOOL_ROUNDS) {
+        toolRounds++;
+        const assembled = [...toolCallsAcc.values()].map((tc) => ({
+          id: tc.id || ('call_' + toolRounds + '_' + crypto.randomUUID().slice(0, 8)),
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments || '{}' }
+        }));
+        chatMessages.push({ role: 'assistant', content: '', tool_calls: assembled });
+        for (const tc of assembled) {
+          const out = await require('./tools').executeCall(tc, ctx || {});
+          if (onToolEvent) {
+            try { onToolEvent({ name: out.name, label: out.label, ok: out.ok }); } catch (e) { /* 忽略 */ }
+          }
+          chatMessages.push({ role: 'tool', tool_call_id: tc.id, content: out.result });
+        }
+        continue; // 不消耗 attempt：工具轮是正常推进
+      }
+      if (wantsTools) {
+        toolsDropped = true; // 工具轮次用尽仍不给正文：摘掉工具强制要最终回答
+        continue;
       }
       if (onSources) onSources([...foundSources.values()].slice(0, 5));
       return full;
@@ -341,6 +478,10 @@ async function chatStream(messages, { temperature, maxTokens, onDelta, onSources
       lastErr = e;
       const st = (e && e.status) || 0;
       const retryable = st === 429 || st === 500 || st === 502 || st === 503;
+      if (funcTools && !toolsDropped && !emitted && st !== 429 && [400, 404, 422].includes(st)) {
+        toolsDropped = true; // function calling 不被支持：摘掉工具重试
+        continue;
+      }
       if (shouldSearch && !searchFallbackUsed && !emitted && st !== 429) {
         searchFallbackUsed = true;
         foundSources.clear();
@@ -358,6 +499,7 @@ async function chatStream(messages, { temperature, maxTokens, onDelta, onSources
       releaseSlot();
     }
     if (attempt < 2) await sleep(2000 * (attempt + 1));
+    attempt++;
   }
   if (lastErr && lastErr.status === 429) {
     const err = new Error('AI 老师有点忙（免费额度限流），请等 10 秒再发送');
@@ -658,4 +800,4 @@ async function synthesize(text) {
   return request;
 }
 
-module.exports = { caps, chatText, enrichSongLines, chatJSON, chatStream, analyzeFrame, analyzeImage, analyzeSongImage, transcribe, synthesize, extractJSON, needsSearch };
+module.exports = { caps, chatText, enrichSongLines, chatJSON, chatJSONWithTools, embedTexts, chatStream, analyzeFrame, analyzeImage, analyzeSongImage, transcribe, synthesize, extractJSON, needsSearch };

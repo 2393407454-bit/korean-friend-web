@@ -9,6 +9,7 @@ const demo = require('./demo');
 const { buildSystemPrompt, buildStreamSystemPrompt } = require('./system-prompt');
 const songLibrary = require('./song-library');
 const security = require('./security');
+const tools = require('./tools');
 
 const SRS_DAYS = [1, 3, 7, 14]; // 间隔复习：1/3/7/14 天
 const LEVEL_RATIO = { TOPIK1: 0.3, TOPIK2: 0.3, TOPIK3: 0.6, TOPIK4: 0.6, TOPIK5: 0.9, TOPIK6: 0.9 };
@@ -399,7 +400,13 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
     { role: 'user', content: finalText }
   ];
 
-  let out = normalizeOut(await llm.chatJSON(messages));
+  // Agent 模式：语言学习/歌词/复习类问题挂 function tools（知识库/曲库/生词本），
+  // 模型自主决定查什么；闲聊与时效问题走原链路，控制免费档延迟。
+  const toolTrace = [];
+  const chatCall = tools.shouldUse(finalText)
+    ? llm.chatJSONWithTools(messages, { doc }, { onToolEvent: (e) => toolTrace.push(e) })
+    : llm.chatJSON(messages);
+  let out = normalizeOut(await chatCall);
   if (isSevereUntranslated(out.display)) {
     out = normalizeOut(await llm.chatJSON(withRepairNote(messages)));
   }
@@ -424,6 +431,7 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
     speech: out.speech || '',
     display: out.display || out.speech || '',
     sources: out.sources || [],
+    tools_used: toolTrace.map((t) => t.label),
     ui_hints: out.ui_hints || {},
     errors: cardErrors(out.state_patch),
     mastered: events.mastered,
@@ -642,7 +650,7 @@ function extractSpeech(display) {
   return plain.slice(0, 240);
 }
 
-async function handleChatStream({ userId, text, channel, mode, characterId, scenarioId, onDelta }) {
+async function handleChatStream({ userId, text, channel, mode, characterId, scenarioId, onDelta, onTool }) {
   const doc = store.loadUser(userId);
   doc.session = doc.session || {};
   doc.session.channel = channel || 'text';
@@ -679,10 +687,20 @@ async function handleChatStream({ userId, text, channel, mode, characterId, scen
   ];
 
   const sources = [];
+  const toolTrace = [];
   const full = await llm.chatStream(messages, {
     maxTokens: 800,
     onDelta,
-    onSources: (found) => sources.splice(0, sources.length, ...(found || []))
+    onSources: (found) => sources.splice(0, sources.length, ...(found || [])),
+    // Agent 模式：命中学习意图才挂 function tools；工具事件实时推给前端做状态提示
+    tools: tools.shouldUse(text) ? tools.getFunctionDefs() : null,
+    ctx: { doc },
+    onToolEvent: (e) => {
+      toolTrace.push(e);
+      if (onTool) {
+        try { onTool({ name: e.name, label: e.label, ok: e.ok }); } catch (err) { /* 回调异常不中断 */ }
+      }
+    }
   });
   recordLearnerEvidence(doc, text);
   applySelfReportedLevel(doc.profile, text);
@@ -747,6 +765,7 @@ async function handleChatStream({ userId, text, channel, mode, characterId, scen
     speech: extractSpeech(display),
     display,
     sources,
+    tools_used: toolTrace.map((t) => t.label),
     state,
     errors: cardErrors(state),
     mastered: masteredEvents(doc, state),

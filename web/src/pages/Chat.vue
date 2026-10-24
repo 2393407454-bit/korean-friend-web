@@ -376,6 +376,7 @@ function sendText(text, channel, opts) {
       scenarioId: (opts && opts.scenarioId) || undefined
     },
     onDelta: twAppend,
+    onTool: (e) => twTool(pendingId, e),
     onDone: (final) => twDone(pendingId, final),
     onError: (e) => twFail(pendingId, e)
   });
@@ -435,6 +436,15 @@ function onMsgScroll() {
   autoScroll = nearBottom;
 }
 
+// 工具调用事件：Agent 查资料时在等待气泡上实时显示（查资料中：教学知识库…）
+function twTool(pendingId, e) {
+  const idx = state.messages.findIndex((m) => m.id === pendingId);
+  if (idx < 0 || !e || !e.label) return;
+  const m = state.messages[idx];
+  if (!m.tools) m.tools = [];
+  if (!m.tools.includes(e.label)) m.tools.push(e.label);
+}
+
 function twDone(pendingId, final) {
   twDoneFlag = true;
   if (twTimer) { clearInterval(twTimer); twTimer = null; }
@@ -454,6 +464,7 @@ function twDone(pendingId, final) {
       blocks: mdParse(display),
       speech: final.speech || '',
       sources: final.sources || [],
+      tools: final.tools_used || (state.messages[idx] && state.messages[idx].tools) || [],
       korean: final.korean_sentences || [],
       errors: (final.errors || []).map((e) => ({ ...e, typeLabel: CODE_LABEL[e.code] || '提示' })),
       mastered: final.mastered || [],
@@ -731,9 +742,9 @@ function doUpload(file, kind) {
           <div v-if="item.role === 'assistant'" class="ava">{{ state.character.avatar }}</div>
 
           <div class="bubble" :class="[item.role, { 'is-pending': item.pending }]">
-            <!-- 等待首字 -->
+            <!-- 等待首字：Agent 查资料时显示已调用的工具 -->
             <div v-if="item.pending" class="pending">
-              <span class="pending-label">老师在想</span>
+              <span class="pending-label">{{ item.tools && item.tools.length ? '查资料中：' + item.tools.join('、') : '老师在想' }}</span>
               <span class="dots"><span class="d"></span><span class="d"></span><span class="d"></span></span>
             </div>
 
@@ -748,6 +759,12 @@ function doUpload(file, kind) {
                   <span v-for="(seg, si) in blk.segs" :key="si" :class="'sg-' + seg.s">{{ seg.t }}</span>
                 </div>
               </template>
+
+              <!-- Agent 工具调用轨迹（可解释性：本轮查过哪些资料） -->
+              <div v-if="item.tools && item.tools.length" class="tool-list">
+                <span class="tool-label">已查阅</span>
+                <span v-for="(t, ti) in item.tools" :key="ti" class="tool-item">{{ t }}</span>
+              </div>
 
               <div v-if="item.sources && item.sources.length" class="source-list">
                 <div class="source-label">参考来源</div>
@@ -1211,6 +1228,9 @@ function doUpload(file, kind) {
 .source-item { display: flex; flex-wrap: wrap; gap: 5px; color: var(--accent-deep); font-size: 11.5px; line-height: 1.4; text-decoration: none; }
 .source-item:hover { text-decoration: underline; }
 .source-date { color: var(--ink-3); }
+.tool-list { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 9px; padding-top: 7px; border-top: 1px dashed var(--line); }
+.tool-label { color: var(--ink-3); font-size: 11px; font-weight: 700; }
+.tool-item { color: var(--ink-2); font-size: 11.5px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1px 7px; }
 .msg-end { height: 12px; }
 
 /* ===== 纠错卡 / 掌握卡 ===== */

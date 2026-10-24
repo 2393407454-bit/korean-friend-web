@@ -4,9 +4,10 @@
 
 ```
 korean-friend-app/
-├── web/                  # 网页版前端（Vue 3 + Vite，含登录页；构建后由 server 同源托管）
-│   ├── src/pages/        #   login / home / chat / pronunciation / song / quotes / profile
-│   └── src/api/          #   fetch 封装、SSE 流式、TTS 播放
+├── web/                  # 网页版前端（Vue 3 + Vite + Pinia，含登录页；构建后由 server 同源托管）
+│   ├── src/pages/        #   login / home / chat / pronunciation / song / quotes / profile（全部路由懒加载）
+│   ├── src/stores/       #   Pinia 登录态（token/用户信息，storage 的响应式视图）
+│   └── src/api/          #   fetch 封装、SSE 流式（含 Agent 工具事件帧）、TTS 播放
 ├── miniprogram/          # 微信小程序前端（原生框架，微信开发者工具直接导入）
 │   ├── pages/chat/       #   对话页：文本/语音输入、TTS 播报、模式切换、文件上传
 │   ├── pages/pronunciation/  # 发音页：跟读练习 → ASR → AI 发音反馈 + 发音评分趋势
@@ -15,12 +16,17 @@ korean-friend-app/
 └── server/               # Node 后端（Express）
     └── src/
         ├── agent.js          # 智能体编排：通道感知 → 状态注入 → 结构化输出 → 状态回写
+        ├── tools.js          # Function Calling 工具集：知识库检索/歌词曲库/生词本（模型自主调用）
+        ├── knowledge.js      # RAG 检索：向量优先（embedding-3 本地索引）+ 关键词降级
+        ├── data/knowledge.js # 韩语教学知识库语料（语法/发音/辨析/文化/备考/生活，80+ 条）
         ├── system-prompt.js  # 教学法系统提示词（动态注入用户状态/复习队列/难度档位）
-        ├── llm.js            # OpenAI 兼容多模态客户端（LLM/VLM/ASR/TTS）+ 演示模式
+        ├── llm.js            # OpenAI 兼容多模态客户端（LLM/VLM/ASR/TTS/embedding）+ 工具循环 + 演示模式
         ├── store.js          # 用户档案/生词本/SRS 复习/错误日志（JSON 存储）
         ├── auth.js           # 网页版账号体系：注册/登录/令牌校验（HMAC，零依赖）
         └── security.js       # 微信 msgSecCheck 内容安全 + code2Session（上线用）
 ```
+
+> Agent 架构（Function Calling + RAG）：聊天命中学习意图时，模型可自主调用 `search_knowledge`（RAG 检索教学知识库）、`search_songs`（已核实歌词曲库）、`lookup_vocab`（学生生词本与复习队列）三个工具，查完资料再生成回复；网页端会在气泡上实时显示「查资料中：教学知识库」与「已查阅」轨迹，可解释、可答辩。工具循环最多 3 轮，模型/网关不支持时自动摘除工具降级，关键词检索在无向量索引（未配 embedding 余额）时兜底，任何一层失败都不影响对话可用。
 
 > 注：README 早期描述过「摄像头抽帧口型纠音」，当前版本**尚未实现**该链路（前端无 camera/抽帧流程），已从文档移除，作为未来可接入的方向记录在案。
 

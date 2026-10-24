@@ -7,7 +7,7 @@ const BASE = import.meta.env.VITE_API_BASE || '';
  * 帧协议：data: {"t":"增量"} … data: {"done":true,...}；网络异常时降级非流式 /api/chat
  * 返回 { abort() }；onDelta/onDone/onError 与小程序端语义一致
  */
-export function streamChat({ data, onDelta, onDone, onError }) {
+export function streamChat({ data, onDelta, onTool, onDone, onError }) {
   const ctrl = new AbortController();
   let finished = false;
   let errorNotified = false;
@@ -33,6 +33,9 @@ export function streamChat({ data, onDelta, onDone, onError }) {
     } else if (obj.error) {
       notifyError(obj.error);
       finished = true;
+    } else if (obj.tool) {
+      // Agent 工具调用事件（查资料中）：可选回调，不影响正文流
+      onTool && onTool(obj.tool);
     } else if (obj.t) {
       gotAnyFrame = true;
       onDelta && onDelta(obj.t);
@@ -59,6 +62,7 @@ export function streamChat({ data, onDelta, onDone, onError }) {
         display: d.display || '',
         speech: d.speech || '',
         sources: d.sources || [],
+        tools_used: d.tools_used || [],
         errors: d.errors || [],
         mastered: d.mastered || [],
         korean_sentences: d.korean_sentences || [],
