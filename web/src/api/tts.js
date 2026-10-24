@@ -4,9 +4,38 @@ import { post } from './client';
 // 交互规则与小程序一致：speak(text) 点一次播放；播放中再次调用同一段文本 = 停止
 // 返回 Promise<true|false|'stopped'>
 let current = null;      // Audio 单例
-let currentUrl = '';     // 当前 blob/data URL（播完即释放）
 let currentText = '';    // 当前正在播放的文本
 let playSeq = 0;         // 合成请求序号：停止/切换后使在途请求失效
+const AUDIO_CACHE_LIMIT = 6;
+const audioCache = new Map(); // text -> Promise<base64|null>，有界内存缓存并复用在途合成
+
+function requestAudio(text) {
+  if (audioCache.has(text)) {
+    const cached = audioCache.get(text);
+    audioCache.delete(text);
+    audioCache.set(text, cached);
+    return cached;
+  }
+
+  const request = post('/api/tts', { text }, 60000)
+    .then((res) => (res && res.audio_base64) || null)
+    .catch(() => null);
+  audioCache.set(text, request);
+  while (audioCache.size > AUDIO_CACHE_LIMIT) {
+    audioCache.delete(audioCache.keys().next().value);
+  }
+  request.then((audio) => {
+    if (!audio && audioCache.get(text) === request) audioCache.delete(text);
+  });
+  return request;
+}
+
+// 助手回复展示后后台预合成；用户点击时优先复用已完成/进行中的请求。
+export function prepareSpeak(text) {
+  const t = String(text || '').trim().slice(0, 400);
+  if (!t) return Promise.resolve(false);
+  return requestAudio(t).then((audio) => !!audio);
+}
 
 export function stopSpeak() {
   playSeq++;
@@ -14,22 +43,14 @@ export function stopSpeak() {
     try { current.pause(); } catch (e) { /* 已停止 */ }
     current = null;
   }
-  if (currentUrl) {
-    try { URL.revokeObjectURL(currentUrl); } catch (e) { /* 忽略 */ }
-    currentUrl = '';
-  }
   currentText = '';
 }
 
 function playBase64(b64, seq) {
   return new Promise((resolve) => {
     try {
-      const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const blob = new Blob([bytes], { type: 'audio/mpeg' });
-      currentUrl = URL.createObjectURL(blob);
-      const audio = new Audio(currentUrl);
+      // 让浏览器原生解码 Base64 音频，避免先在 JS 主线程逐字节解码再复制成 Blob。
+      const audio = new Audio('data:audio/mpeg;base64,' + b64);
       current = audio;
       audio.onended = () => { stopSpeak(); resolve(true); };
       audio.onerror = () => { stopSpeak(); resolve(false); };
@@ -55,19 +76,15 @@ export function speak(text) {
   currentText = t;
   const seq = playSeq;
 
-  return post('/api/tts', { text: t }, 60000).then(
-    (res) => {
-      if (seq !== playSeq) return 'stopped'; // 期间已被停止/切换
-      const b64 = res && res.audio_base64;
-      if (!b64) return false;
-      return playBase64(b64, seq).then((ok) => {
-        if (!ok && seq === playSeq) currentText = '';
-        return ok;
-      });
-    },
-    () => {
-      if (seq === playSeq) currentText = '';
+  return requestAudio(t).then((b64) => {
+    if (seq !== playSeq) return 'stopped'; // 期间已被停止/切换
+    if (!b64) {
+      currentText = '';
       return false;
     }
-  );
+    return playBase64(b64, seq).then((ok) => {
+      if (!ok && seq === playSeq) currentText = '';
+      return ok;
+    });
+  });
 }

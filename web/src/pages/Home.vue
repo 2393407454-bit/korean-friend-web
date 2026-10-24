@@ -1,7 +1,7 @@
 <script setup>
 // 首页「오늘의 한국어」：今日训练入口 + 能力概览 + 学习闭环叙事
 // 数据原则：只展示用户档案中的真实数据；暂无数据的维度一律显示「待评估」，不编造分数
-import { reactive, ref } from 'vue';
+import { onActivated, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { get } from '../api/client';
 import { currentUid, storeSet } from '../utils/storage';
@@ -130,6 +130,10 @@ function onDemoConfirm() {
 }
 
 load();
+
+// 首页被 keep-alive 缓存后，每次从其他 tab 切回时静默刷新一次：
+// load() 不在开始时切换 loading，已有内容保持展示、不闪骨架，数据回来后原地更新
+onActivated(load);
 </script>
 
 <template>

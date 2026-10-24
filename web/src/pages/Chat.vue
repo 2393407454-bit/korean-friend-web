@@ -306,7 +306,7 @@ function loadHistory() {
         const text = m.content;
         return m.role === 'user'
           ? { id: 'm' + ++msgSeq, role: 'user', text }
-          : { id: 'm' + ++msgSeq, role: 'assistant', text, blocks: mdParse(text) };
+          : { id: 'm' + ++msgSeq, role: 'assistant', text, blocks: mdParse(text), sources: m.sources || [] };
       });
       state.messages = state.messages.concat(loaded);
       scrollToBottom();
@@ -453,6 +453,7 @@ function twDone(pendingId, final) {
       text: display,
       blocks: mdParse(display),
       speech: final.speech || '',
+      sources: final.sources || [],
       korean: final.korean_sentences || [],
       errors: (final.errors || []).map((e) => ({ ...e, typeLabel: CODE_LABEL[e.code] || '提示' })),
       mastered: final.mastered || [],
@@ -747,6 +748,21 @@ function doUpload(file, kind) {
                   <span v-for="(seg, si) in blk.segs" :key="si" :class="'sg-' + seg.s">{{ seg.t }}</span>
                 </div>
               </template>
+
+              <div v-if="item.sources && item.sources.length" class="source-list">
+                <div class="source-label">参考来源</div>
+                <a
+                  v-for="(source, si) in item.sources"
+                  :key="source.url || si"
+                  class="source-item"
+                  :href="source.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span class="source-title">{{ source.title }}</span>
+                  <span v-if="source.published_at" class="source-date">{{ source.published_at }}</span>
+                </a>
+              </div>
 
               <!-- 结构化纠错卡 -->
               <div v-if="item.errors && item.errors.length" class="cards-stack">
@@ -1190,6 +1206,11 @@ function doUpload(file, kind) {
 }
 .op:active { background: var(--surface-2); }
 .op-accent { color: var(--accent-deep); border-color: rgba(11,107,232,.35); }
+.source-list { display: flex; flex-direction: column; gap: 4px; margin-top: 9px; padding-top: 7px; border-top: 1px solid var(--line); }
+.source-label { color: var(--ink-3); font-size: 11px; font-weight: 700; }
+.source-item { display: flex; flex-wrap: wrap; gap: 5px; color: var(--accent-deep); font-size: 11.5px; line-height: 1.4; text-decoration: none; }
+.source-item:hover { text-decoration: underline; }
+.source-date { color: var(--ink-3); }
 .msg-end { height: 12px; }
 
 /* ===== 纠错卡 / 掌握卡 ===== */

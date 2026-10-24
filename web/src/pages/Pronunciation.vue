@@ -1,7 +1,7 @@
 <script setup>
 // 发音跟读页（自小程序 pages/pronunciation 移植）：
 // 内置 6 课 + AI 动态课程；标准音 TTS；按住跟读录音 → /api/pronounce ASR+AI 评分；趋势/我会了落库
-import { reactive } from 'vue';
+import { onBeforeUnmount, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { get, post, uploadFile } from '../api/client';
 import { speak } from '../api/tts';
@@ -47,6 +47,10 @@ const data = reactive({
 });
 
 let recorder = null;
+
+onBeforeUnmount(() => {
+  if (recorder) recorder.cancel();
+});
 
 // 当前实际跟读目标：AI 句子优先，否则用课程句
 function currentTarget() {

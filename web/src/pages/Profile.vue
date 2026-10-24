@@ -110,6 +110,39 @@ function loadAbilities() {
   }).catch(() => {});
 }
 
+function levelBadgeLabel() {
+  const profile = data.profile || {};
+  const assessment = profile.assessment || {};
+  if (assessment.status === 'assessed') return profile.level || '已评估';
+  if (profile.self_reported_level) return '用户自述';
+  return profile.level ? '待核实' : '待评估';
+}
+
+function assessmentDescription() {
+  const profile = data.profile || {};
+  const assessment = profile.assessment || {};
+  if (assessment.status === 'assessed') {
+    const confidence = { low: '初步', medium: '中等', high: '较高' }[assessment.confidence] || '初步';
+    return `根据 ${assessment.evidence_turns || 0} 条不同的韩语表达评估 · ${confidence}置信度`;
+  }
+  if (profile.self_reported_level) return '这是你的自述水平；中文聊天不会被当作韩语能力证据';
+  if (profile.level) return '历史等级缺少评估依据，继续练习后会重新核实';
+  return '至少收集 3 条不同的韩语表达后，才会给出正式估级';
+}
+
+function assessmentConfidenceLabel() {
+  const assessment = (data.profile && data.profile.assessment) || {};
+  if (assessment.status === 'assessed') return ({ low: '初步', medium: '中等', high: '较高' })[assessment.confidence] || '初步';
+  if (assessment.status === 'provisional') return '待验证';
+  return '待收集';
+}
+
+function romanizationLabel() {
+  const profile = data.profile || {};
+  const policy = profile.romanization_policy || (profile.romanization === false ? 'on_request' : 'new_words');
+  return policy === 'new_words' ? '新词附标音' : '按需标音';
+}
+
 function drawCharts() {
   drawRadar();
   drawTrend();
@@ -470,18 +503,20 @@ if (data.isAdmin) loadAdminMessages();
     <!-- ===== 档案 Banner ===== -->
     <div class="card profile-hero rise rise-2">
       <div class="level-badge">
-        <span class="level-text">{{ data.profile.level || '초급' }}</span>
-        <span class="level-cap">TOPIK</span>
+        <span class="level-text">{{ levelBadgeLabel() }}</span>
+        <span class="level-cap">水平状态</span>
       </div>
       <div class="hero-right">
         <div class="h-sec">My 한국어 档案</div>
         <div class="goal-row">
           <span v-if="data.profile.goalDisplay" class="tag tag-accent">目标 · {{ data.profile.goalDisplay }}</span>
-          <span v-else class="tag">完成一次对话自动定级</span>
+          <span v-else class="tag">对话练习逐步评估</span>
         </div>
-        <div v-if="data.profile.level" class="meta-row">
-          <span class="meta-chip">韩语配比 <b class="num">{{ data.profile.korean_ratio !== undefined ? data.profile.korean_ratio * 100 : 30 }}%</b></span>
-          <span class="meta-chip">罗马音 <b>{{ data.profile.romanization ? '开' : '关' }}</b></span>
+        <div class="assessment-note">{{ assessmentDescription() }}</div>
+        <div class="meta-row">
+          <span class="meta-chip">评估状态 <b>{{ assessmentConfidenceLabel() }}</b></span>
+          <span class="meta-chip">标音 <b>{{ romanizationLabel() }}</b></span>
+          <span class="meta-chip">韩语回复比例 <b class="num">{{ data.profile.korean_ratio !== undefined ? data.profile.korean_ratio * 100 : 30 }}%</b></span>
         </div>
       </div>
     </div>
@@ -793,6 +828,7 @@ if (data.isAdmin) loadAdminMessages();
 .level-cap { font-size: 8px; letter-spacing: .14em; opacity: .6; margin-top: 2px; }
 .hero-right { flex: 1; min-width: 0; }
 .goal-row { margin-top: 8px; }
+.assessment-note { margin-top: 7px; font-size: 10px; line-height: 1.45; color: var(--ink-3); }
 .meta-row { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
 .meta-chip {
   display: inline-flex; align-items: center; gap: 5px;
