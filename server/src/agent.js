@@ -331,10 +331,22 @@ function isSevereUntranslated(text) {
   return s.maxLen >= 12 || s.count >= 3;
 }
 
+const TRANSLATION_GUARD_APOLOGY = '抱歉，我这次没能可靠地配好韩语和中文翻译。\n다시 확인할게요.\n我再确认一下，再给你准确的说法。';
+
+// 翻译自愈重试：在 system 后插入纠正提示，要求带翻译重新输出完整回复
+function withRepairNote(messages) {
+  const note = {
+    role: 'system',
+    content: '刚才那次回复里有韩语内容没有紧跟简体中文翻译。请重新输出完整回复：每个韩语句子、短语、台词和歌词后面都必须紧跟自然、准确的简体中文翻译；不要道歉、不要解释格式，直接给出内容。'
+  };
+  return messages.length && messages[0] && messages[0].role === 'system'
+    ? [messages[0], note, ...messages.slice(1)]
+    : [note, ...messages];
+}
+
 function guardBeginnerTranslation(out) {
   if (!out || !isSevereUntranslated(out.display)) return out;
-  const safe = '抱歉，我这次没能可靠地配好韩语和中文翻译。\n다시 확인할게요.\n我再确认一下，再给你准确的说法。';
-  return { ...out, display: safe, speech: safe, state_patch: {}, errors: [], mastered: [], korean_sentences: [] };
+  return { ...out, display: TRANSLATION_GUARD_APOLOGY, speech: TRANSLATION_GUARD_APOLOGY, state_patch: {}, errors: [], mastered: [], korean_sentences: [] };
 }
 
 async function handleChat({ userId, text, channel, mode, frameBase64, characterId, scenarioId }) {
@@ -387,7 +399,11 @@ async function handleChat({ userId, text, channel, mode, frameBase64, characterI
     { role: 'user', content: finalText }
   ];
 
-  const out = guardBeginnerTranslation(normalizeOut(await llm.chatJSON(messages)));
+  let out = normalizeOut(await llm.chatJSON(messages));
+  if (isSevereUntranslated(out.display)) {
+    out = normalizeOut(await llm.chatJSON(withRepairNote(messages)));
+  }
+  out = guardBeginnerTranslation(out);
   recordLearnerEvidence(doc, finalText);
   applySelfReportedLevel(doc.profile, finalText);
   const events = applyStatePatch(doc, out.state_patch || {}, { learnerText: finalText });
@@ -688,8 +704,28 @@ async function handleChatStream({ userId, text, channel, mode, characterId, scen
   if (!display) display = full.replace(/@@STATE@@[^\n]*\n?/g, '').trim();
   if (!display) display = '（AI 没有返回内容，请重新发送试试）';
   if (isSevereUntranslated(display)) {
-    display = '抱歉，我这次没能可靠地配好韩语和中文翻译。\n다시 확인할게요.\n我再确认一下，再给你准确的说法。';
-    state = {};
+    // 自愈重试：带纠正提示再生成一次（本次不再推流，重试成功后由 done 帧整体替换前端内容）
+    const retry = await llm.chatStream(withRepairNote(messages), { maxTokens: 800 });
+    let retryDisplay = '';
+    let retryState = {};
+    const rm = retry.match(/@@STATE@@([\s\S]*)$/);
+    if (rm) {
+      retryDisplay = retry.slice(0, rm.index).trim();
+      try {
+        retryState = llm.extractJSON(rm[1]) || {};
+      } catch (e) {
+        retryState = {};
+      }
+    } else {
+      retryDisplay = retry.trim();
+    }
+    if (retryDisplay && !isSevereUntranslated(retryDisplay)) {
+      display = retryDisplay;
+      state = retryState;
+    } else {
+      display = TRANSLATION_GUARD_APOLOGY;
+      state = {};
+    }
   }
 
   applyStatePatch(doc, state, { learnerText: text });
