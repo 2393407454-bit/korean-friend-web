@@ -573,7 +573,8 @@ loadSongs();
 
 <style scoped>
 .page-song {
-  max-width: 480px;
+  width: 100%;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding: 20px 0 0;
 }

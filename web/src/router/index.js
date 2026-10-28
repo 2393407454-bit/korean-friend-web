@@ -6,8 +6,8 @@ import { useAuthStore } from '../stores/auth';
 const routes = [
   { path: '/login', name: 'login', component: () => import('../pages/Login.vue'), meta: { public: true, wide: true } },
   { path: '/project', name: 'project', component: () => import('../pages/Project.vue'), meta: { public: true, wide: true } },
-  { path: '/home', name: 'home', component: () => import('../pages/Home.vue'), meta: { tab: true, wide: true } },
-  { path: '/course', name: 'course', component: () => import('../pages/Course.vue'), meta: { tab: true, wide: true } },
+  { path: '/home', name: 'home', component: () => import('../pages/Home.vue'), meta: { tab: true } },
+  { path: '/course', name: 'course', component: () => import('../pages/Course.vue'), meta: { tab: true } },
   { path: '/chat', name: 'chat', component: () => import('../pages/Chat.vue'), meta: { tab: true } },
   { path: '/pronunciation', name: 'pronunciation', component: () => import('../pages/Pronunciation.vue'), meta: { tab: true } },
   { path: '/quotes', name: 'quotes', component: () => import('../pages/Quotes.vue'), meta: { tab: true } },
