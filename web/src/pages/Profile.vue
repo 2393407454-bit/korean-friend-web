@@ -1,9 +1,11 @@
 <script setup>
 // 我的页（自小程序 pages/profile 移植）：
 // 档案概览 + 头像昵称 + 能力画像（canvas 雷达图/趋势图）+ 报告 + 重置 + 留言 + 管理员面板
-import { onBeforeUnmount, reactive, ref } from 'vue';
+import { computed, onBeforeUnmount, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { get, post, uploadFile } from '../api/client';
+import { loadCourse, courseState } from '../api/course';
+import { LEVELS, levelInfo, unitCompletion } from '../data/korean-course';
 import { currentUid, storeGet, storeSet } from '../utils/storage';
 import { useAuthStore } from '../stores/auth';
 import { showToast } from '../utils/ui';
@@ -43,6 +45,15 @@ const data = reactive({
   adminMessages: [],
   adminLoading: false,
   noticeDraft: ''
+});
+
+const course = computed(() => courseState.course);
+const xpInfo = computed(() => levelInfo(course.value.xp));
+const coursePct = computed(() => {
+  const all = LEVELS.flatMap((l) => l.units);
+  if (!all.length) return 0;
+  const sum = all.reduce((acc, u) => acc + unitCompletion(course.value.progress || {}, u), 0);
+  return Math.round(sum / all.length);
 });
 
 const radarCanvas = ref(null);
@@ -468,6 +479,7 @@ function onResetConfirm() {
     data.errorN = 0;
     showToast('档案已重置');
     load();
+    loadCourse(true);
   });
 }
 
@@ -476,6 +488,7 @@ onBeforeUnmount(() => {
 });
 
 load();
+loadCourse();
 if (data.isAdmin) loadAdminMessages();
 </script>
 
@@ -520,6 +533,26 @@ if (data.isAdmin) loadAdminMessages();
           <span class="meta-chip">标音 <b>{{ romanizationLabel() }}</b></span>
           <span class="meta-chip">韩语回复比例 <b class="num">{{ data.profile.korean_ratio !== undefined ? data.profile.korean_ratio * 100 : 30 }}%</b></span>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== 课程学习进度（A1-B1）===== -->
+    <div class="card course-entry rise rise-2" @click="router.push('/progress')">
+      <div class="ce-top">
+        <div>
+          <div class="ce-kicker">COURSE PROGRESS</div>
+          <div class="ce-title">LV.{{ xpInfo.level }} · {{ xpInfo.title }}</div>
+        </div>
+        <span class="ce-xp num">{{ course.xp }} XP</span>
+      </div>
+      <div class="ce-bar">
+        <div class="bar-track"><div class="bar-fill" :style="{ width: coursePct + '%' }"></div></div>
+        <span class="num">{{ coursePct }}%</span>
+      </div>
+      <div class="ce-foot">
+        <span>连续 {{ course.streak }} 天</span>
+        <span>18 单元 · 54 课</span>
+        <span class="ce-arrow">查看进度 →</span>
       </div>
     </div>
 
@@ -1035,4 +1068,23 @@ if (data.isAdmin) loadAdminMessages();
   -webkit-user-select: none;
   cursor: default;
 }
+
+/* ===== 课程进度入口 ===== */
+.course-entry { cursor: pointer; }
+.ce-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ce-kicker { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: var(--ink-3); }
+.ce-title { margin-top: 3px; font-size: 16px; font-weight: 800; }
+.ce-xp {
+  flex: none;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 11px; font-weight: 700;
+}
+.ce-bar { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 11px; color: var(--ink-2); }
+.ce-bar .bar-track { flex: 1; height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.ce-bar .bar-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width .4s cubic-bezier(.22,.61,.36,1); }
+.ce-foot { display: flex; align-items: center; gap: 12px; margin-top: 9px; font-size: 10px; color: var(--ink-3); }
+.ce-arrow { margin-left: auto; color: var(--accent-deep); font-weight: 600; }
 </style>

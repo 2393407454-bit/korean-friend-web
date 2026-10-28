@@ -8,6 +8,7 @@ const route = useRoute();
 
 const tabs = [
   { path: '/home',          label: '今日', icon: 'home' },
+  { path: '/course',        label: '课程', icon: 'book' },
   { path: '/chat',          label: '对话', icon: 'chat' },
   { path: '/pronunciation', label: '发音', icon: 'mic' },
   { path: '/quotes',        label: '名句', icon: 'quote' },
@@ -52,6 +53,11 @@ const activeIndex = computed(() => {
           <!-- 今日：房屋 -->
           <template v-if="t.icon === 'home'">
             <path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1v-8.5Z" />
+          </template>
+          <!-- 课程：书本 -->
+          <template v-else-if="t.icon === 'book'">
+            <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4V5.5Z" />
+            <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6V5.5Z" />
           </template>
           <!-- 对话：气泡 -->
           <template v-else-if="t.icon === 'chat'">

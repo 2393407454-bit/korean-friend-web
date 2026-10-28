@@ -18,6 +18,8 @@ export default defineConfig({
       output: {
         // 第三方依赖单独成 vendor chunk：业务代码迭代时用户无需重新下载框架代码（长缓存）
         manualChunks(id) {
+          // three.js 只在「课程」页按需加载，单独成 chunk，不把它塞进首屏 vendor
+          if (id.includes('node_modules/three')) return 'three';
           if (id.includes('node_modules')) return 'vendor';
         }
       }

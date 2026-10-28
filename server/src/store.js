@@ -48,6 +48,16 @@ function defaultUser(userId) {
       scenario_reports: [], // 情景对练复盘记录（Phase 8，最多 20 条）
       song_lessons: []     // K-pop 歌词课程（用户确认歌名后保存，最多 30 首）
     },
+    // 分级课程进度（A1/A2/B1 共 18 单元）：单元→课时→模式三层的真实完成记录
+    course: {
+      xp: 0,
+      progress: {},
+      activity: {},   // 'YYYY-MM-DD' -> 当日学习分钟数（12 周热力图数据源）
+      streak: 0,
+      best_streak: 0,
+      last_date: '',
+      updated_at: null
+    },
     stats: {
       daily: {},           // 'YYYY-MM-DD' -> { turns, errors, new_words, pron_tries }
       streak_days: 0,
@@ -87,6 +97,12 @@ function normalize(doc) {
   }
   doc.stats = Object.assign({}, base.stats, doc.stats || {});
   doc.stats.daily = doc.stats.daily || {};
+  doc.course = Object.assign({}, base.course, doc.course || {});
+  if (!doc.course.progress || typeof doc.course.progress !== 'object') doc.course.progress = {};
+  if (!doc.course.activity || typeof doc.course.activity !== 'object') doc.course.activity = {};
+  doc.course.xp = Math.max(0, Number(doc.course.xp) || 0);
+  doc.course.streak = Math.max(0, Number(doc.course.streak) || 0);
+  doc.course.best_streak = Math.max(doc.course.streak, Number(doc.course.best_streak) || 0);
   doc.session = Object.assign({}, base.session, doc.session || {});
   doc.messages = Array.isArray(doc.messages) ? doc.messages : [];
   return doc;

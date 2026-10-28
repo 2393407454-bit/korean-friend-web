@@ -15,6 +15,7 @@ const feedback = require('./feedback');
 const auth = require('./auth');
 const knowledge = require('./knowledge');
 const media = require('./media');
+const course = require('./course');
 
 const app = express();
 app.use(express.json({ limit: '8mb' }));
@@ -439,6 +440,28 @@ app.post('/api/quotes/generate', async (req, res) => {
 
 app.get('/api/profile/:uid', (req, res) => {
   res.json(store.loadUser(safeUid(req.authUserId || req.params.uid)));
+});
+
+// ===== 分级课程（A1/A2/B1）：进度读取 + 单次练习结算 =====
+app.get('/api/course/:uid', (req, res) => {
+  try {
+    const uid = safeUid(req.authUserId || req.params.uid);
+    if (!uid) return res.status(400).json({ error: 'userId required' });
+    res.json(course.getCourse(uid));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/course/progress', (req, res) => {
+  try {
+    const userId = authed(req);
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const { unitId, lessonId, mode, score, minutes } = req.body || {};
+    res.json(course.recordProgress({ userId, unitId, lessonId, mode, score, minutes }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 // 能力画像：数据驱动评分（缺证据维度为 null = 待评估）

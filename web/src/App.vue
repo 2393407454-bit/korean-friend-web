@@ -4,7 +4,7 @@ import { toastState } from './utils/ui';
 </script>
 
 <template>
-  <div class="shell">
+  <div class="shell" :class="{ 'shell-wide': $route.meta.wide }">
     <router-view v-slot="{ Component }">
       <!-- 交叉淡切：新旧页面同时在场交替，取消 out-in 串行等待 -->
       <transition name="page">
@@ -35,6 +35,7 @@ import { toastState } from './utils/ui';
   pointer-events: none;
 }
 .page-enter-active { position: relative; z-index: 1; }
+.shell.shell-wide { width: 100%; max-width: none; min-height: 100dvh; background: #f4f3ef; }
 .page-enter-from {
   opacity: 0;
   transform: translateY(6px);

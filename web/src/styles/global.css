@@ -37,6 +37,7 @@
   --tabbar-h: 60px;
   --floatbar-offset: 12px;
   --font: -apple-system, "PingFang SC", "SF Pro Text", "Noto Sans CJK KR", "Malgun Gothic", sans-serif;
+  --font-display: "Iowan Old Style", "Noto Serif KR", "Songti SC", "STSong", Georgia, serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }

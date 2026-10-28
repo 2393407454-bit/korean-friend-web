@@ -13,12 +13,14 @@ export function createRecorder() {
   let ctx = null;
   let processor = null;
   let source = null;
+  let analyser = null;
+  let waveRaf = 0;
   let chunks = [];
   let startedAt = 0;
   let tickTimer = null;
   let running = false;
 
-  async function start({ maxSeconds = 30, onTick } = {}) {
+  async function start({ maxSeconds = 30, onTick, onLevel } = {}) {
     if (running) return;
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       throw new Error('当前浏览器不支持麦克风录音');
@@ -37,8 +39,29 @@ export function createRecorder() {
     };
     source.connect(processor);
     processor.connect(ctx.destination);
+
     running = true;
     startedAt = Date.now();
+
+    // 实时波形：AnalyserNode 只读取电平，不接入输出，避免回声
+    if (onLevel) {
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      const paint = () => {
+        if (!running) return;
+        analyser.getByteTimeDomainData(buf);
+        let peak = 0;
+        for (let i = 0; i < buf.length; i += 1) {
+          const v = Math.abs(buf[i] - 128);
+          if (v > peak) peak = v;
+        }
+        onLevel(Math.min(1, peak / 110));
+        waveRaf = requestAnimationFrame(paint);
+      };
+      paint();
+    }
 
     const tick = () => {
       const sec = Math.floor((Date.now() - startedAt) / 1000);
@@ -51,11 +74,13 @@ export function createRecorder() {
 
   function _cleanup() {
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    if (waveRaf) { cancelAnimationFrame(waveRaf); waveRaf = 0; }
     try { processor && processor.disconnect(); } catch (e) { /* 忽略 */ }
+    try { analyser && analyser.disconnect(); } catch (e) { /* 忽略 */ }
     try { source && source.disconnect(); } catch (e) { /* 忽略 */ }
     if (stream) stream.getTracks().forEach((t) => t.stop());
     try { ctx && ctx.close(); } catch (e) { /* 忽略 */ }
-    stream = null; ctx = null; processor = null; source = null;
+    stream = null; ctx = null; processor = null; source = null; analyser = null;
     running = false;
   }
 

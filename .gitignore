@@ -18,6 +18,7 @@ node_modules/
 .mimosa/
 server/.mimosa/
 .workbuddy-ai/
+.video_agent/
 *.continue.json
 .zcode/
 

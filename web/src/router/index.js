@@ -4,13 +4,17 @@ import { useAuthStore } from '../stores/auth';
 // tab 页：home/chat/pronunciation/quotes/profile（对应小程序 tabBar）
 // song 为二级页（对应 wx.navigateTo）；login 公开，其余一律登录后可见
 const routes = [
-  { path: '/login', name: 'login', component: () => import('../pages/Login.vue'), meta: { public: true } },
-  { path: '/home', name: 'home', component: () => import('../pages/Home.vue'), meta: { tab: true } },
+  { path: '/login', name: 'login', component: () => import('../pages/Login.vue'), meta: { public: true, wide: true } },
+  { path: '/project', name: 'project', component: () => import('../pages/Project.vue'), meta: { public: true, wide: true } },
+  { path: '/home', name: 'home', component: () => import('../pages/Home.vue'), meta: { tab: true, wide: true } },
+  { path: '/course', name: 'course', component: () => import('../pages/Course.vue'), meta: { tab: true, wide: true } },
   { path: '/chat', name: 'chat', component: () => import('../pages/Chat.vue'), meta: { tab: true } },
   { path: '/pronunciation', name: 'pronunciation', component: () => import('../pages/Pronunciation.vue'), meta: { tab: true } },
   { path: '/quotes', name: 'quotes', component: () => import('../pages/Quotes.vue'), meta: { tab: true } },
   { path: '/profile', name: 'profile', component: () => import('../pages/Profile.vue'), meta: { tab: true } },
   { path: '/song', name: 'song', component: () => import('../pages/Song.vue') },
+  { path: '/practice/:unitId/:lessonId/:mode', name: 'practice', component: () => import('../pages/Practice.vue') },
+  { path: '/progress', name: 'progress', component: () => import('../pages/Progress.vue') },
   { path: '/', redirect: '/home' },
   { path: '/:pathMatch(.*)*', redirect: '/home' }
 ];

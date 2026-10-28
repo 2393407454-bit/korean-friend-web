@@ -17,6 +17,8 @@ const showPassword2 = ref(false);
 const error = ref('');
 const busy = ref(false);
 const shake = ref(false);
+const welcome = ref(false);
+const welcomeName = ref('');
 
 function switchMode(m) {
   if (mode.value === m) return;
@@ -63,6 +65,10 @@ async function submit() {
     const url = mode.value === 'register' ? '/api/auth/register' : '/api/auth/login';
     const res = await post(url, { username: name, password: pwd });
     auth.signIn(res);
+    welcomeName.value = name;
+    welcome.value = true;
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    await new Promise((resolve) => setTimeout(resolve, prefersReducedMotion ? 0 : 1350));
     router.push('/home');
   } catch (e) {
     error.value = e.message || '请求失败，请稍后再试';
@@ -77,7 +83,21 @@ async function submit() {
   <div class="login-page">
     <div class="hangul-watermark" aria-hidden="true">가나다</div>
 
-    <main class="login-wrap">
+    <main class="login-wrap login-layout">
+      <section class="editorial-cover" aria-label="首尔学习期刊封面">
+        <img src="/images/seoul-editorial.webp" alt="清晨的首尔韩屋屋顶与城市天际线" fetchpriority="high" />
+        <div class="editorial-top"><span>한국어 친구</span><span>VOL. 01</span></div>
+        <div class="editorial-title">
+          <span>THE SEOUL</span>
+          <strong>SPEAKING<br />JOURNAL</strong>
+        </div>
+        <div class="editorial-bottom">
+          <span>一座城市，一种语言，<br />从今天开始练习。</span>
+          <span>37°34′N<br />126°58′E</span>
+        </div>
+      </section>
+
+      <div class="login-panel">
       <header class="brand rise rise-1">
         <div class="brand-mark" aria-hidden="true">한</div>
         <div class="brand-copy">
@@ -201,7 +221,31 @@ async function submit() {
         <span class="foot-rule" aria-hidden="true"></span>
         <span>오늘도 수고했어요 · 今天也加油</span>
       </footer>
+
+      <router-link class="project-link" to="/project">了解这个韩语学习作品 <span aria-hidden="true">↗</span></router-link>
+      </div>
     </main>
+
+    <Transition name="welcome">
+      <div v-if="welcome" class="welcome-screen" role="status" aria-live="polite">
+        <div class="welcome-magazine">
+          <div class="welcome-visual" aria-hidden="true">
+            <img src="/images/seoul-editorial.webp" alt="" />
+            <span>THE NEXT<br />CHAPTER</span>
+            <b>01</b>
+          </div>
+          <div class="welcome-card">
+            <div class="welcome-index">SEOUL · STUDY JOURNAL <span>NO. 01</span></div>
+            <div class="welcome-stamp" aria-hidden="true">한</div>
+            <div class="welcome-kicker">오늘의 한국어 여정</div>
+            <h2>{{ welcomeName }}，<br />欢迎回来</h2>
+            <p>正在为你翻开今天的练习期刊</p>
+            <div class="welcome-route"><i></i><i></i><i></i><i></i><b></b></div>
+            <div class="welcome-caption">YOUR NEXT CHAPTER STARTS HERE</div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -217,6 +261,61 @@ async function submit() {
   isolation: isolate;
   overflow: hidden;
 }
+
+.welcome-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: hidden;
+  color: #f7f3e9;
+  background: radial-gradient(ellipse at 50% 38%, #274763 0%, #142b3b 45%, #0e1d29 100%);
+}
+.welcome-screen::before,
+.welcome-screen::after {
+  content: '';
+  position: absolute;
+  width: min(90vw, 560px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(228, 190, 126, .22);
+  border-radius: 50%;
+  animation: welcome-orbit 5s linear infinite;
+}
+.welcome-screen::after { width: min(68vw, 420px); animation-duration: 7s; animation-direction: reverse; }
+.welcome-orbit { position: absolute; inset: 0; opacity: .48; }
+.welcome-orbit span { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #e9bc7d; box-shadow: 0 0 18px 5px rgba(233,188,125,.35); }
+.welcome-orbit span:nth-child(1) { top: 18%; left: 22%; }
+.welcome-orbit span:nth-child(2) { right: 18%; top: 33%; width: 3px; height: 3px; }
+.welcome-orbit span:nth-child(3) { bottom: 17%; left: 31%; width: 4px; height: 4px; }
+.welcome-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 370px);
+  padding: 27px 27px 25px;
+  color: #172a36;
+  background: #f2ecdf;
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 3px;
+  box-shadow: 0 26px 80px rgba(0,0,0,.34);
+  transform: rotate(-1.2deg);
+}
+.welcome-index { display: flex; justify-content: space-between; padding-bottom: 13px; border-bottom: 1px solid rgba(23,42,54,.18); color: #69736f; font-size: 9px; letter-spacing: .16em; }
+.welcome-index span { color: #a9783d; }
+.welcome-stamp { width: 48px; height: 48px; display: grid; place-items: center; margin: 26px 0 18px; border: 1px solid #b17d43; border-radius: 50%; color: #a56e34; font-size: 22px; transform: rotate(7deg); }
+.welcome-kicker { color: #9a6c38; font-size: 10px; letter-spacing: .2em; }
+.welcome-card h2 { margin: 7px 0 5px; font-size: 23px; line-height: 1.35; letter-spacing: -.04em; }
+.welcome-card p { margin: 0; color: #647078; font-size: 12px; }
+.welcome-route { position: relative; display: flex; justify-content: space-between; align-items: center; margin: 27px 0 12px; }
+.welcome-route::before { content: ''; position: absolute; left: 3px; right: 3px; top: 50%; border-top: 1px dashed #b78a58; }
+.welcome-route i, .welcome-route b { position: relative; width: 8px; height: 8px; border: 1.5px solid #a9783d; border-radius: 50%; background: #f2ecdf; }
+.welcome-route b { width: 12px; height: 12px; background: #a9783d; box-shadow: 0 0 0 4px rgba(169,120,61,.14); }
+.welcome-caption { color: #818986; font-size: 8px; letter-spacing: .18em; }
+@keyframes welcome-orbit { to { transform: rotate(360deg); } }
+.welcome-enter-active, .welcome-leave-active { transition: opacity .28s ease, transform .42s cubic-bezier(.2,.75,.2,1); }
+.welcome-enter-from { opacity: 0; transform: scale(1.04); }
+.welcome-leave-to { opacity: 0; transform: scale(.98); }
 
 .hangul-watermark {
   position: absolute;
@@ -509,6 +608,16 @@ async function submit() {
   font-size: 11px;
   letter-spacing: 0.035em;
 }
+.project-link {
+  display: block;
+  width: fit-content;
+  margin: 18px auto 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  transition: color .2s ease;
+}
+.project-link span { margin-left: 3px; color: var(--accent); }
+.project-link:hover { color: var(--accent-deep); }
 .foot-rule { width: 22px; height: 1px; background: var(--line-2); }
 
 .rise {
@@ -548,5 +657,96 @@ async function submit() {
   .password-toggle,
   .match-note { animation: none; transition: none; }
   .rise { opacity: 1; }
+  .welcome-screen::before, .welcome-screen::after { animation: none; }
+  .welcome-enter-active, .welcome-leave-active { transition: none; }
+}
+
+/* 2026 现代韩系杂志：城市封面 + 登录内页 */
+.login-page { display: block; padding: 0; background: #f3f1eb; }
+.login-layout { width: 100%; max-width: none; min-height: 100dvh; }
+.editorial-cover {
+  position: relative;
+  height: 196px;
+  overflow: hidden;
+  color: #f8f5ec;
+  background: #5e5a4c;
+}
+.editorial-cover::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,25,24,.3), transparent 42%, rgba(20,25,24,.66)); }
+.editorial-cover img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 57%; }
+.editorial-top, .editorial-bottom, .editorial-title { position: absolute; z-index: 1; left: 22px; right: 22px; }
+.editorial-top { top: 18px; display: flex; justify-content: space-between; padding-bottom: 9px; border-bottom: 1px solid rgba(255,255,255,.65); font-size: 10px; font-weight: 700; letter-spacing: .16em; }
+.editorial-title { top: 53px; display: flex; flex-direction: column; }
+.editorial-title span { font-size: 10px; letter-spacing: .24em; }
+.editorial-title strong { margin-top: 3px; font-family: var(--font-display); font-size: 32px; font-weight: 500; line-height: .94; letter-spacing: -.045em; }
+.editorial-bottom { bottom: 17px; display: flex; align-items: flex-end; justify-content: space-between; font-size: 9px; line-height: 1.6; letter-spacing: .06em; }
+.editorial-bottom span:last-child { text-align: right; font-size: 8px; letter-spacing: .12em; }
+.login-panel { width: 100%; max-width: 440px; margin: 0 auto; padding: 28px 22px 32px; }
+.login-panel .brand { margin-bottom: 30px; }
+.login-panel .brand-mark { border-radius: 50%; background: transparent; border-color: var(--ink); color: var(--ink); }
+.login-panel .login-card { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.login-panel .login-intro h1 { font-family: var(--font-display); font-size: 38px; font-weight: 600; letter-spacing: -.065em; }
+.login-panel .mode-tabs { border-radius: 0; border-width: 0 0 1px; padding: 0 0 8px; background: transparent; }
+.login-panel .mode-pill { top: auto; bottom: -1px; left: 0; width: 50%; height: 2px; border: 0; border-radius: 0; background: var(--ink); }
+.login-panel .mode-tab { min-height: 44px; }
+.login-panel .field-input { border-width: 0 0 1px; border-radius: 0; background: transparent; padding-left: 0; }
+.login-panel .field-input:focus { box-shadow: none; background: transparent; }
+.login-panel .submit-btn { min-height: 52px; border-radius: 0; background: #202725; }
+.login-panel .login-foot { margin-top: 28px; }
+
+.welcome-screen { background: #e9e5db; }
+.welcome-screen::before, .welcome-screen::after, .welcome-orbit { display: none; }
+.welcome-magazine {
+  position: relative;
+  width: min(100%, 390px);
+  min-height: 520px;
+  display: grid;
+  overflow: hidden;
+  background: #f5f1e7;
+  box-shadow: 0 32px 80px rgba(38,43,39,.22);
+  transform-origin: left center;
+}
+.welcome-magazine::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 8px; background: #223836; z-index: 3; }
+.welcome-visual { display: none; position: relative; overflow: hidden; color: #f8f5ec; }
+.welcome-visual::after { content: ''; position: absolute; inset: 0; background: rgba(24,34,31,.28); }
+.welcome-visual img { width: 100%; height: 100%; object-fit: cover; }
+.welcome-visual span { position: absolute; z-index: 1; left: 28px; bottom: 34px; font-family: var(--font-display); font-size: 38px; line-height: .98; }
+.welcome-visual b { position: absolute; z-index: 1; right: 22px; top: 24px; font-family: var(--font-display); font-size: 46px; font-weight: 400; }
+.welcome-magazine .welcome-card { width: 100%; padding: 34px 30px; border: 0; border-radius: 0; background: #f5f1e7; box-shadow: none; transform: none; }
+.welcome-magazine .welcome-card h2 { margin-top: 12px; font-family: var(--font-display); font-size: 32px; font-weight: 600; letter-spacing: -.055em; }
+.welcome-magazine .welcome-stamp { border-radius: 0; transform: rotate(-5deg); }
+.welcome-enter-active .welcome-magazine { animation: magazine-open .85s cubic-bezier(.16,1,.3,1) both; }
+.welcome-enter-active .welcome-card > * { animation: welcome-copy .55s .34s cubic-bezier(.16,1,.3,1) both; }
+.welcome-enter-active .welcome-card > *:nth-child(2) { animation-delay: .4s; }
+.welcome-enter-active .welcome-card > *:nth-child(3) { animation-delay: .46s; }
+.welcome-enter-active .welcome-card > *:nth-child(4) { animation-delay: .52s; }
+.welcome-enter-active .welcome-card > *:nth-child(5) { animation-delay: .58s; }
+.welcome-leave-active .welcome-magazine { transform: translateX(-18px) rotateY(-5deg); opacity: 0; transition: transform .28s ease-in, opacity .24s ease-in; }
+@keyframes magazine-open { from { opacity: 0; transform: perspective(1300px) rotateY(-24deg) translateX(50px); } to { opacity: 1; transform: perspective(1300px) rotateY(0) translateX(0); } }
+@keyframes welcome-copy { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (min-width: 760px) {
+  .login-layout { display: grid; grid-template-columns: minmax(360px, 1.06fr) minmax(420px, .94fr); }
+  .editorial-cover { height: 100dvh; min-height: 640px; position: sticky; top: 0; }
+  .editorial-cover img { object-position: 50% 54%; }
+  .editorial-top, .editorial-bottom, .editorial-title { left: clamp(30px, 4vw, 64px); right: clamp(30px, 4vw, 64px); }
+  .editorial-top { top: 36px; font-size: 11px; }
+  .editorial-title { top: auto; bottom: 128px; }
+  .editorial-title span { font-size: 12px; }
+  .editorial-title strong { font-size: clamp(56px, 6.6vw, 98px); }
+  .editorial-bottom { bottom: 38px; font-size: 11px; }
+  .login-panel { max-width: 500px; padding: 48px 56px; }
+  .login-panel .login-intro h1 { font-size: 46px; }
+  .welcome-magazine { width: min(86vw, 860px); min-height: 560px; grid-template-columns: .9fr 1fr; }
+  .welcome-visual { display: block; }
+  .welcome-magazine .welcome-card { padding: 42px 40px; align-self: center; }
+}
+@media (max-width: 360px) {
+  .login-panel { padding: 24px 17px 28px; }
+  .editorial-cover { height: 174px; }
+  .login-panel .brand { margin-bottom: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-enter-active .welcome-magazine, .welcome-enter-active .welcome-card > * { animation: none; }
+  .welcome-leave-active .welcome-magazine { transition: none; transform: none; }
 }
 </style>

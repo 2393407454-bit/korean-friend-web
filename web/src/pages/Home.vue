@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router';
 import { get } from '../api/client';
 import { currentUid, storeSet } from '../utils/storage';
 import ConfirmModal from '../components/ConfirmModal.vue';
+import EditorialCover3D from '../components/EditorialCover3D.vue';
 
 const router = useRouter();
 
@@ -149,6 +150,8 @@ onActivated(load);
         <span class="hl-cap">{{ data.level ? 'TOPIK 等级' : '完成测试解锁' }}</span>
       </button>
     </header>
+
+    <EditorialCover3D class="rise rise-1" @open="router.push('/course')" />
 
     <!-- ===== AI 教练状态带 ===== -->
     <section v-if="!data.loading" class="coach rise rise-1">
@@ -303,7 +306,7 @@ onActivated(load);
 </template>
 
 <style scoped>
-.page { padding: 20px 16px calc(var(--tabbar-h) + var(--floatbar-offset) + env(safe-area-inset-bottom) + 16px); }
+.page { width: 100%; max-width: 940px; margin: 0 auto; padding: 24px 16px calc(var(--tabbar-h) + var(--floatbar-offset) + env(safe-area-inset-bottom) + 24px); }
 
 /* ===== 顶部 ===== */
 .hero {
@@ -524,4 +527,13 @@ onActivated(load);
 .de-t1 { font-size: 13px; font-weight: 700; color: var(--ink); }
 .de-t2 { font-size: 11px; color: var(--ink-3); }
 .de-arrow { color: var(--ink-3); flex-shrink: 0; }
+
+@media (min-width: 760px) {
+  .page { padding: 42px 32px 120px; }
+  .hero { align-items: flex-end; margin-bottom: 30px; }
+  .hero-title { font-family: var(--font-display); font-size: 44px; font-weight: 600; letter-spacing: -.06em; }
+  .hero-sub { font-size: 13px; }
+  .coach, .card, .demo-entry { max-width: 700px; margin-left: auto; margin-right: auto; }
+  .coach { margin-bottom: 20px; }
+}
 </style>
