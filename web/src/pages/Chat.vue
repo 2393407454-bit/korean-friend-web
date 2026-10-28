@@ -839,84 +839,87 @@ function doUpload(file, kind) {
       <div class="msg-end"></div>
     </div>
 
-    <!-- ===== 录音浮层 ===== -->
-    <div v-if="state.recording" class="rec-mask">
-      <div class="rec-card">
-        <span class="rec-badge">REC</span>
-        <div class="wavebars">
-          <span class="bar b1"></span><span class="bar b2"></span><span class="bar b3"></span><span class="bar b4"></span>
-          <span class="bar b5"></span><span class="bar b6"></span><span class="bar b7"></span>
+    <Teleport to="body">
+      <!-- 弹层脱离聊天页的 isolation 层叠上下文，避免固定导航压住弹层 -->
+      <!-- ===== 录音浮层 ===== -->
+      <div v-if="state.recording" class="rec-mask">
+        <div class="rec-card">
+          <span class="rec-badge">REC</span>
+          <div class="wavebars">
+            <span class="bar b1"></span><span class="bar b2"></span><span class="bar b3"></span><span class="bar b4"></span>
+            <span class="bar b5"></span><span class="bar b6"></span><span class="bar b7"></span>
+          </div>
+          <div class="rec-hint">正在听你说韩语…</div>
+          <div class="rec-sub num">{{ state.recordTime }}s / 30s</div>
+          <button class="rec-stop" @click="onVoiceEnd">结束并识别</button>
+          <div class="rec-tip">松开麦克风或点上方按钮结束</div>
         </div>
-        <div class="rec-hint">正在听你说韩语…</div>
-        <div class="rec-sub num">{{ state.recordTime }}s / 30s</div>
-        <button class="rec-stop" @click="onVoiceEnd">结束并识别</button>
-        <div class="rec-tip">松开麦克风或点上方按钮结束</div>
       </div>
-    </div>
 
-    <!-- ===== 情景选择面板 ===== -->
-    <div v-if="state.scenarioSheet" class="sheet-mask" @click="state.scenarioSheet = false"></div>
-    <div class="sheet" :class="{ 'sheet-up': state.scenarioSheet }">
-      <div class="sheet-head">
-        <span class="sheet-title">역할극 · 情景对练</span>
-        <button class="sheet-close" @click="state.scenarioSheet = false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-      </div>
-      <div class="sheet-body">
-        <div class="cap" style="margin-bottom: 12px;">选择一个真实生活场景，AI 扮演其中的角色，陪你完成任务。</div>
-        <div v-for="grp in state.scenarioGroups" :key="grp.cat" class="sc-cat">
-          <div class="sc-cat-name">{{ grp.cat }}</div>
-          <div class="sc-grid">
-            <button v-for="s in grp.items" :key="s.id" class="sc-item" @click="onScenarioTap(s)">
-              <span class="si-ico">{{ s.icon }}</span>
-              <span class="si-info">
-                <span class="si-name">{{ s.name }}</span>
-                <span class="si-meta">
-                  <span class="si-ko">{{ s.name_ko }}</span>
-                  <span class="si-level">{{ s.level }}</span>
+      <!-- ===== 情景选择面板 ===== -->
+      <div v-if="state.scenarioSheet" class="sheet-mask" @click="state.scenarioSheet = false"></div>
+      <div class="sheet" :class="{ 'sheet-up': state.scenarioSheet }">
+        <div class="sheet-head">
+          <span class="sheet-title">역할극 · 情景对练</span>
+          <button class="sheet-close" @click="state.scenarioSheet = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <div class="cap" style="margin-bottom: 12px;">选择一个真实生活场景，AI 扮演其中的角色，陪你完成任务。</div>
+          <div v-for="grp in state.scenarioGroups" :key="grp.cat" class="sc-cat">
+            <div class="sc-cat-name">{{ grp.cat }}</div>
+            <div class="sc-grid">
+              <button v-for="s in grp.items" :key="s.id" class="sc-item" @click="onScenarioTap(s)">
+                <span class="si-ico">{{ s.icon }}</span>
+                <span class="si-info">
+                  <span class="si-name">{{ s.name }}</span>
+                  <span class="si-meta">
+                    <span class="si-ko">{{ s.name_ko }}</span>
+                    <span class="si-level">{{ s.level }}</span>
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- ===== 角色切换弹层 ===== -->
-    <div v-if="state.charSheet" class="sheet-mask" @click="state.charSheet = false"></div>
-    <div class="sheet" :class="{ 'sheet-up': state.charSheet }">
-      <div class="sheet-head">
-        <span class="sheet-title">선생님 · 选择老师</span>
-        <button class="sheet-close" @click="state.charSheet = false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
+      <!-- ===== 角色切换弹层 ===== -->
+      <div v-if="state.charSheet" class="sheet-mask" @click="state.charSheet = false"></div>
+      <div class="sheet" :class="{ 'sheet-up': state.charSheet }">
+        <div class="sheet-head">
+          <span class="sheet-title">선생님 · 选择老师</span>
+          <button class="sheet-close" @click="state.charSheet = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body char-list">
+          <button v-for="c in state.characters" :key="c.id" class="char-item" @click="onCharacterPick(c)">
+            <span class="char-ava">{{ c.avatar }}</span>
+            <span class="char-info">
+              <span class="char-name">{{ c.name }}</span>
+              <span class="char-tag">{{ c.tagline }}</span>
+            </span>
+            <span v-if="c.id === state.character.id" class="char-on">✓</span>
+          </button>
+        </div>
       </div>
-      <div class="sheet-body char-list">
-        <button v-for="c in state.characters" :key="c.id" class="char-item" @click="onCharacterPick(c)">
-          <span class="char-ava">{{ c.avatar }}</span>
-          <span class="char-info">
-            <span class="char-name">{{ c.name }}</span>
-            <span class="char-tag">{{ c.tagline }}</span>
-          </span>
-          <span v-if="c.id === state.character.id" class="char-on">✓</span>
-        </button>
-      </div>
-    </div>
 
-    <!-- ===== 快捷提问弹层 ===== -->
-    <div v-if="state.tipSheet" class="sheet-mask" @click="state.tipSheet = false"></div>
-    <div class="sheet" :class="{ 'sheet-up': state.tipSheet }">
-      <div class="sheet-head">
-        <span class="sheet-title">빠른 시작 · 快捷提问</span>
-        <button class="sheet-close" @click="state.tipSheet = false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
+      <!-- ===== 快捷提问弹层 ===== -->
+      <div v-if="state.tipSheet" class="sheet-mask" @click="state.tipSheet = false"></div>
+      <div class="sheet" :class="{ 'sheet-up': state.tipSheet }">
+        <div class="sheet-head">
+          <span class="sheet-title">빠른 시작 · 快捷提问</span>
+          <button class="sheet-close" @click="state.tipSheet = false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        <div class="sheet-body">
+          <button v-for="t in QUICK_TIPS" :key="t.label" class="tip-item" @click="onQuickTip(t)">{{ t.label }}</button>
+        </div>
       </div>
-      <div class="sheet-body">
-        <button v-for="t in QUICK_TIPS" :key="t.label" class="tip-item" @click="onQuickTip(t)">{{ t.label }}</button>
-      </div>
-    </div>
+    </Teleport>
 
     <!-- ===== Demo 控制条 ===== -->
     <div v-if="state.demoMode" class="demo-bar">
@@ -964,20 +967,22 @@ function doUpload(file, kind) {
     <input ref="docInput" type="file" accept=".txt,.md,.srt,.lrc" hidden @change="onDocPicked" />
 
     <!-- 确认弹窗 -->
-    <ConfirmModal
-      :visible="newSessionVisible"
-      title="开始新对话"
-      content="当前对话会存入历史，确定重新开始吗？"
-      @confirm="onNewSessionConfirm"
-      @close="newSessionVisible = false"
-    />
-    <ConfirmModal
-      :visible="demoExitVisible"
-      title="退出演示模式"
-      content="退出后回到真实 AI 对话（演示数据会保留在隔离档案中）。"
-      @confirm="onDemoExitConfirm"
-      @close="demoExitVisible = false"
-    />
+    <Teleport to="body">
+      <ConfirmModal
+        :visible="newSessionVisible"
+        title="开始新对话"
+        content="当前对话会存入历史，确定重新开始吗？"
+        @confirm="onNewSessionConfirm"
+        @close="newSessionVisible = false"
+      />
+      <ConfirmModal
+        :visible="demoExitVisible"
+        title="退出演示模式"
+        content="退出后回到真实 AI 对话（演示数据会保留在隔离档案中）。"
+        @confirm="onDemoExitConfirm"
+        @close="demoExitVisible = false"
+      />
+    </Teleport>
   </div>
 </template>
 
