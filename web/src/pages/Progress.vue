@@ -306,7 +306,7 @@ onMounted(() => {
 .radar { width: 52%; max-width: 200px; flex: none; }
 .radar .grid-line { fill: none; stroke: rgba(20, 21, 25, 0.08); stroke-width: 1; }
 .radar .axis { stroke: rgba(20, 21, 25, 0.06); stroke-width: 1; }
-.radar .shape { fill: rgba(11, 107, 232, 0.16); stroke: var(--accent); stroke-width: 1.8; }
+.radar .shape { fill: rgba(169, 120, 61, 0.16); stroke: var(--accent); stroke-width: 1.8; }
 .radar .dot { fill: var(--accent); }
 .radar text { font-size: 9px; fill: var(--ink-3); font-weight: 600; }
 .radar-legend { flex: 1; display: flex; flex-direction: column; gap: 6px; }
@@ -328,11 +328,11 @@ onMounted(() => {
 
 .heat-grid { display: flex; gap: 4px; margin-top: 8px; overflow-x: auto; padding-bottom: 2px; }
 .heat-week { display: flex; flex-direction: column; gap: 4px; flex: none; }
-.heat-cell { width: 11px; height: 11px; border-radius: 3px; background: #EEEDE8; display: inline-block; }
-.heat-cell.l1 { background: #CFE0FA; }
-.heat-cell.l2 { background: #9EC5F5; }
-.heat-cell.l3 { background: #5A9BEC; }
-.heat-cell.l4 { background: #0B6BE8; }
+.heat-cell { width: 11px; height: 11px; border-radius: 2px; background: #EAE6DA; display: inline-block; }
+.heat-cell.l1 { background: #EBDFC9; }
+.heat-cell.l2 { background: #DDC79E; }
+.heat-cell.l3 { background: #C9A367; }
+.heat-cell.l4 { background: #A9783D; }
 .heat-legend { display: flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 9px; color: var(--ink-3); }
 .heat-legend .heat-cell { width: 9px; height: 9px; }
 .hl-l { margin: 0 2px; }

@@ -207,15 +207,17 @@ function init() {
   cardBody.receiveShadow = true;
 
   // 卡面是纯贴图，用 Basic 材质保证文字与底色不被光照压暗
+  // 位置必须在 ExtrudeGeometry 端盖之外：depth 0.1 + 两端 bevelThickness 0.025
+  // 使卡体实际跨越 z ±0.075，贴面若放在 ±0.058 会被卡体端盖完全遮挡（单词不可见）
   frontMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
     color: 0xffffff, toneMapped: false
   }));
-  frontMesh.position.z = 0.058;
+  frontMesh.position.z = 0.076;
 
   backMesh = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({
     color: 0xffffff, toneMapped: false
   }));
-  backMesh.position.z = -0.058;
+  backMesh.position.z = -0.076;
   backMesh.rotation.y = Math.PI;
 
   cardGroup = new THREE.Group();

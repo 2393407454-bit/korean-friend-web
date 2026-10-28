@@ -1,5 +1,5 @@
 <script setup>
-// 悬浮胶囊导航：线性图标 + 毛玻璃 + 滑动高亮
+// 悬浮胶囊导航（韩风杂志版）：纸感玻璃 + 发丝线 + 墨色滑动印泥
 // 布局：flex column，图标永远居中，标签在下方，无绝对定位偏移
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
@@ -24,7 +24,7 @@ const activeIndex = computed(() => {
 <template>
   <nav class="tabbar" role="tablist" aria-label="主导航">
     <div class="tabbar-inner">
-      <!-- 滑动高亮背景 -->
+      <!-- 滑动高亮：墨色印泥 -->
       <div
         class="tabbar-glider"
         :style="{ transform: `translateX(${activeIndex * 100}%)` }"
@@ -94,15 +94,14 @@ const activeIndex = computed(() => {
   transform: translateX(-50%);
   z-index: 50;
   padding: 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(20, 21, 25, 0.06);
+  border-radius: var(--radius-pill);
+  background: rgba(252, 251, 247, 0.88);
+  border: 1px solid var(--line-2);
   box-shadow:
-    0 6px 24px rgba(20, 21, 25, 0.08),
-    0 20px 48px rgba(20, 21, 25, 0.10),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+    0 6px 24px rgba(32, 39, 37, 0.10),
+    0 20px 48px rgba(32, 39, 37, 0.12);
+  backdrop-filter: saturate(160%) blur(20px);
+  -webkit-backdrop-filter: saturate(160%) blur(20px);
 }
 
 .tabbar-inner {
@@ -112,7 +111,7 @@ const activeIndex = computed(() => {
   gap: 2px;
 }
 
-/* 滑动高亮圆盘 */
+/* 滑动高亮：墨色圆印，激活项反白 */
 .tabbar-glider {
   position: absolute;
   top: 0;
@@ -120,8 +119,7 @@ const activeIndex = computed(() => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--accent-soft);
-  box-shadow: 0 2px 8px rgba(11, 107, 232, 0.12);
+  background: var(--ink);
   transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
   z-index: 0;
 }
@@ -149,7 +147,7 @@ const activeIndex = computed(() => {
 }
 
 .tab-on {
-  color: var(--accent-deep);
+  color: #FCFBF7;
 }
 
 /* 图标：固定尺寸，永远居中 */
@@ -168,10 +166,10 @@ const activeIndex = computed(() => {
 .tab-label {
   font-size: 8.5px;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
   line-height: 1;
   transition: opacity 0.25s ease;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .tab-on .tab-label {

@@ -351,7 +351,7 @@ onActivated(load);
   border: none;
   background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--accent-soft) 60%, var(--surface)));
   color: var(--accent-deep);
-  box-shadow: 0 4px 14px rgba(11, 107, 232, 0.14);
+  box-shadow: 0 4px 14px rgba(169, 120, 61, 0.18);
 }
 .hl-cap { font-size: 10px; color: var(--ink-3); }
 

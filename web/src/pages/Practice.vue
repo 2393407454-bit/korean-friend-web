@@ -341,7 +341,7 @@ async function finish(rawScore) {
     };
   } catch (e) {
     s.summary = { score, gain: 0, streak: courseState.course.streak || 0, saving: false, title: unit.zh, offline: true };
-    showToast('进度暂未同步，请检查后端');
+    showToast(e && e.offline ? '已离线保存，联网后自动同步进度' : '进度暂未同步，请检查后端');
   }
 }
 
@@ -411,7 +411,7 @@ onBeforeUnmount(() => {
         <svg viewBox="0 0 120 120">
           <circle cx="60" cy="60" r="52" fill="none" stroke="#EDEDEA" stroke-width="10" />
           <circle
-            cx="60" cy="60" r="52" fill="none" stroke="#0B6BE8" stroke-width="10" stroke-linecap="round"
+            cx="60" cy="60" r="52" fill="none" stroke="#A9783D" stroke-width="10" stroke-linecap="round"
             :stroke-dasharray="2 * Math.PI * 52"
             :stroke-dashoffset="2 * Math.PI * 52 * (1 - s.summary.score / 100)"
             transform="rotate(-90 60 60)"
@@ -428,7 +428,7 @@ onBeforeUnmount(() => {
         <div class="sum-stat"><strong class="num">+{{ s.summary.gain }}</strong><span>获得 XP</span></div>
         <div class="sum-stat"><strong class="num">{{ s.summary.streak }}</strong><span>连续天数</span></div>
       </div>
-      <div v-if="s.summary.offline" class="cap sum-offline">网络异常，本次进度尚未入库</div>
+      <div v-if="s.summary.offline" class="cap sum-offline">网络异常 · 已离线保存，联网后自动同步</div>
 
       <div class="sum-actions">
         <button class="btn btn-ghost btn-pill" @click="backToCourse">返回课程</button>

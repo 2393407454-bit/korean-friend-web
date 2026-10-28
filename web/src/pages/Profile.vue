@@ -224,9 +224,9 @@ function drawRadar() {
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(11, 107, 232, 0.10)';
+    ctx.fillStyle = 'rgba(169, 120, 61, 0.12)';
     ctx.fill();
-    ctx.strokeStyle = '#0B6BE8';
+    ctx.strokeStyle = '#A9783D';
     ctx.lineWidth = 1.8;
     ctx.stroke();
     // 顶点 + 分数
@@ -239,11 +239,11 @@ function drawRadar() {
       const y = cy + r * Math.sin(ang);
       ctx.beginPath();
       ctx.arc(x, y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = '#0B6BE8';
+      ctx.fillStyle = '#A9783D';
       ctx.fill();
       ctx.font = '600 10px -apple-system, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#0952B8';
+      ctx.fillStyle = '#845C2B';
       ctx.fillText(String(d.score), x, y - 8);
     }
   } else {
@@ -302,23 +302,23 @@ function drawTrend() {
   ctx.stroke();
   ctx.beginPath();
   hist.forEach((x, i) => (i === 0 ? ctx.moveTo(xAt(i), yAt(x.overall)) : ctx.lineTo(xAt(i), yAt(x.overall))));
-  ctx.strokeStyle = '#0B6BE8';
+  ctx.strokeStyle = '#A9783D';
   ctx.lineWidth = 1.8;
   ctx.stroke();
   ctx.lineTo(xAt(hist.length - 1), h - padB);
   ctx.lineTo(xAt(0), h - padB);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(11, 107, 232, 0.06)';
+  ctx.fillStyle = 'rgba(169, 120, 61, 0.08)';
   ctx.fill();
   hist.forEach((x, i) => {
     ctx.beginPath();
     ctx.arc(xAt(i), yAt(x.overall), 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#0B6BE8';
+    ctx.fillStyle = '#A9783D';
     ctx.fill();
   });
   const lastV = hist[hist.length - 1].overall;
   ctx.font = '600 11px -apple-system, sans-serif';
-  ctx.fillStyle = '#0952B8';
+  ctx.fillStyle = '#845C2B';
   ctx.textAlign = 'right';
   ctx.fillText(String(lastV) + ' 分', w - padR, yAt(lastV) - 6);
 }

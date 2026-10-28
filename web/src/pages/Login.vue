@@ -351,7 +351,7 @@ async function submit() {
   flex: 0 0 44px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(11, 107, 232, 0.12);
+  border: 1px solid rgba(32, 39, 37, 0.14);
   border-radius: 13px;
   background: var(--accent-soft);
   color: var(--accent-deep);

@@ -25,7 +25,7 @@ function loadFavs() {
 function normalizeQuote(quote) {
   const colors = Array.isArray(quote && quote.color) && quote.color.length >= 2
     ? quote.color.slice(0, 2)
-    : ['#EAF3FF', '#DCEAFF'];
+    : ['#E8DFC8', '#D9C9A3'];
   return { ...(quote || {}), color: colors };
 }
 
@@ -400,7 +400,7 @@ function onGoChat() {
 }
 .ftag:active { transform: scale(0.96); }
 .ftag.is-on { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 600; }
-.ftag-ai { color: var(--accent-deep); border-color: rgba(11, 107, 232, 0.35); background: var(--accent-soft); }
+.ftag-ai { color: var(--accent-deep); border-color: rgba(169, 120, 61, 0.35); background: var(--accent-soft); }
 .ftag-ai.is-loading { opacity: .6; }
 
 /* ===== 名句卡片流 ===== */

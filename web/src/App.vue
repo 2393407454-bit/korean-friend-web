@@ -1,6 +1,20 @@
 <script setup>
+import { onBeforeUnmount, onMounted } from 'vue';
 import TabBar from './components/TabBar.vue';
 import { toastState } from './utils/ui';
+import { getSession } from './utils/storage';
+import { flushProgressQueue } from './api/course';
+
+// 启动与网络恢复时补报离线练习记录（后端不可达期间学完的课程不丢失）
+function syncOfflineProgress() {
+  if (!getSession().token) return;
+  flushProgressQueue();
+}
+onMounted(() => {
+  syncOfflineProgress();
+  window.addEventListener('online', syncOfflineProgress);
+});
+onBeforeUnmount(() => window.removeEventListener('online', syncOfflineProgress));
 </script>
 
 <template>
@@ -35,7 +49,7 @@ import { toastState } from './utils/ui';
   pointer-events: none;
 }
 .page-enter-active { position: relative; z-index: 1; }
-.shell.shell-wide { width: 100%; max-width: none; min-height: 100dvh; background: #f4f3ef; }
+.shell.shell-wide { width: 100%; max-width: none; min-height: 100dvh; background: var(--bg); }
 .page-enter-from {
   opacity: 0;
   transform: translateY(6px);
