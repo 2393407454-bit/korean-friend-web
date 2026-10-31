@@ -316,10 +316,7 @@ onActivated(load);
   margin: 0 0 18px;
 }
 .hero-title {
-  background: linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--ink);
 }
 .hero-sub { margin-top: 6px; font-size: 12px; color: var(--ink-3); }
 .hero-level {
@@ -362,7 +359,7 @@ onActivated(load);
   gap: 12px;
   padding: 15px 16px;
   margin-bottom: 14px;
-  background: linear-gradient(135deg, var(--ink) 0%, #1C1E25 100%);
+  background: var(--ink);
   border-radius: var(--radius-l);
   color: #F8F8F6;
   position: relative;
