@@ -24,7 +24,6 @@ const ui = reactive({
 });
 
 const loading = ref(!courseState.loaded);
-const sheetVisible = ref(false);
 
 const course = computed(() => courseState.course);
 const progress = computed(() => course.value.progress || {});
@@ -32,7 +31,6 @@ const xpInfo = computed(() => levelInfo(course.value.xp));
 const activeLevel = computed(() => LEVELS.find((l) => l.id === ui.activeLevel) || LEVELS[0]);
 const activeUnlock = computed(() => levelUnlockInfo(progress.value, LEVELS.findIndex((l) => l.id === ui.activeLevel)));
 const activeUnits = computed(() => unitsOfLevel(ui.activeLevel));
-const selectedUnit = computed(() => activeUnits.value.find((u) => u.id === ui.selectedUnitId) || null);
 
 const continueTarget = computed(() => {
   if (!activeUnlock.value.unlocked) return null;
@@ -81,23 +79,16 @@ function onSelectUnit(unitId) {
     if (!info.unlocked) return;
     ui.activeLevel = found.id;
     ui.selectedUnitId = unitId;
-    sheetVisible.value = true;
     return;
   }
   if (!activeUnlock.value.unlocked) return;
   ui.selectedUnitId = unitId;
-  sheetVisible.value = true;
 }
 
-function openUnit(unit) {
+// 叠放：点击单元头展开/收起课时详情
+function toggleUnit(unit) {
   if (!activeUnlock.value.unlocked) return;
-  ui.selectedUnitId = unit.id;
-  sheetVisible.value = true;
-}
-
-function closeSheet() {
-  sheetVisible.value = false;
-  ui.selectedUnitId = '';
+  ui.selectedUnitId = ui.selectedUnitId === unit.id ? '' : unit.id;
 }
 
 function goPractice(unit, lesson, mode) {
@@ -227,28 +218,62 @@ onMounted(() => {
       <button v-if="prevLevel" class="btn btn-primary btn-pill lb-btn" @click="onSelectLevel(prevLevel.id)">回到 {{ prevLevel.id }} · {{ prevLevel.title }}</button>
     </div>
 
-    <div v-else class="unit-list">
-      <button
+    <div v-else class="unit-stack">
+      <div
         v-for="(unit, i) in activeUnits"
         :key="unit.id"
-        class="unit-card rise"
-        :style="{ animationDelay: 0.03 * i + 's' }"
-        @click="openUnit(unit)"
+        class="unit-item"
+        :style="{ '--i': i }"
+        :class="{ 'is-open': ui.selectedUnitId === unit.id }"
       >
-        <div class="uc-top">
-          <span class="uc-index num">{{ String(i + 1).padStart(2, '0') }}</span>
-          <div class="uc-names">
-            <span class="uc-zh">{{ unit.zh }}</span>
-            <span class="uc-ko">{{ unit.title }}</span>
+        <button
+          class="unit-toggle"
+          type="button"
+          :aria-expanded="ui.selectedUnitId === unit.id"
+          @click="toggleUnit(unit)"
+        >
+          <span class="ut-index num">{{ String(i + 1).padStart(2, '0') }}</span>
+          <span class="ut-names">
+            <span class="ut-zh">{{ unit.zh }}</span>
+            <span class="ut-ko">{{ unit.title }}</span>
+          </span>
+          <span class="ut-pct num" :class="{ 'is-started': unitPct(unit) > 0 }">{{ unitPct(unit) }}%</span>
+          <svg class="ut-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        <div class="unit-body" :aria-hidden="ui.selectedUnitId !== unit.id">
+          <div class="unit-inner">
+            <div class="ut-wrap">
+              <p class="ut-blurb">{{ unit.blurb }}</p>
+              <div class="ut-bar-row">
+                <div class="bar-track"><div class="bar-fill" :style="{ width: unitPct(unit) + '%' }"></div></div>
+                <span class="ut-cap">3 节课 · 8 项练习</span>
+              </div>
+              <div class="ut-lessons">
+                <div v-for="lesson in unit.lessons" :key="lesson.id" class="ut-lesson">
+                  <div class="utl-top">
+                    <span class="utl-title">{{ lesson.title }}</span>
+                    <span class="utl-note">{{ lesson.note }}</span>
+                    <span class="utl-pct num">{{ lessonPct(unit, lesson).done }}/{{ lessonPct(unit, lesson).total }}</span>
+                  </div>
+                  <div class="utl-modes">
+                    <button
+                      v-for="mode in lesson.modes"
+                      :key="mode"
+                      class="utl-mode"
+                      @click="goPractice(unit, lesson, mode)"
+                    >
+                      <span class="utlm-label">{{ MODE_META[mode].label }}</span>
+                      <span v-if="bestOf(unit, lesson, mode) != null" class="utlm-score num">{{ bestOf(unit, lesson, mode) }} 分</span>
+                      <span v-else class="utlm-score is-new">开始</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="ut-foot cap">完成一节课的全部练习后，该课时计入单元进度</div>
+            </div>
           </div>
-          <span class="uc-pct num">{{ unitPct(unit) }}%</span>
         </div>
-        <div class="uc-blurb">{{ unit.blurb }}</div>
-        <div class="uc-foot">
-          <div class="bar-track"><div class="bar-fill" :style="{ width: unitPct(unit) + '%' }"></div></div>
-          <span class="uc-cap">3 节课 · 8 项练习</span>
-        </div>
-      </button>
+      </div>
     </div>
 
     <button class="progress-entry rise rise-4" @click="goProgress">
@@ -258,50 +283,6 @@ onMounted(() => {
       </span>
       <span class="pe-arrow">→</span>
     </button>
-
-    <!-- 单元详情 -->
-    <transition name="sheet">
-      <div v-if="sheetVisible && selectedUnit" class="sheet-mask" @click.self="closeSheet">
-        <section class="sheet">
-          <div class="sheet-grab"></div>
-          <header class="sh-head">
-            <div>
-              <div class="sh-kicker">{{ ui.activeLevel }} · {{ selectedUnit.title }}</div>
-              <h2 class="sh-title">{{ selectedUnit.zh }}</h2>
-            </div>
-            <button class="sh-close" aria-label="关闭" @click="closeSheet">✕</button>
-          </header>
-          <p class="sh-blurb">{{ selectedUnit.blurb }}</p>
-          <div class="sh-bar">
-            <div class="bar-track"><div class="bar-fill" :style="{ width: unitPct(selectedUnit) + '%' }"></div></div>
-            <span class="num">{{ unitPct(selectedUnit) }}%</span>
-          </div>
-
-          <div class="lesson-list">
-            <div v-for="lesson in selectedUnit.lessons" :key="lesson.id" class="lesson">
-              <div class="ls-top">
-                <span class="ls-title">{{ lesson.title }}</span>
-                <span class="ls-note">{{ lesson.note }}</span>
-                <span class="ls-pct num">{{ lessonPct(selectedUnit, lesson).done }}/{{ lessonPct(selectedUnit, lesson).total }}</span>
-              </div>
-              <div class="ls-modes">
-                <button
-                  v-for="mode in lesson.modes"
-                  :key="mode"
-                  class="ls-mode"
-                  @click="goPractice(selectedUnit, lesson, mode)"
-                >
-                  <span class="lsm-label">{{ MODE_META[mode].label }}</span>
-                  <span v-if="bestOf(selectedUnit, lesson, mode) != null" class="lsm-score num">{{ bestOf(selectedUnit, lesson, mode) }} 分</span>
-                  <span v-else class="lsm-score is-new">开始</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          <div class="sh-foot cap">完成一节课的全部练习后，该课时计入单元进度</div>
-        </section>
-      </div>
-    </transition>
   </div>
 </template>
 
@@ -366,14 +347,14 @@ onMounted(() => {
   margin: 14px 14px 0;
   padding: 14px 16px;
   border-radius: var(--radius-l);
-  background: linear-gradient(135deg, #141519 0%, #23262F 100%);
+  background: var(--ink);
   color: #fff;
   box-shadow: 0 10px 24px rgba(20, 21, 25, 0.18);
 }
 .cc-copy { flex: 1; min-width: 0; }
-.cc-kicker { font-size: 9px; letter-spacing: .14em; color: #9BA3AF; font-weight: 700; }
+.cc-kicker { font-size: 9px; letter-spacing: .14em; color: rgba(255, 255, 255, 0.66); font-weight: 700; }
 .cc-title { margin-top: 3px; font-size: 15px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.continue-card .cap { color: #B9BFC8; margin-top: 2px; }
+.continue-card .cap { color: rgba(255, 255, 255, 0.78); margin-top: 2px; }
 .cc-btn {
   flex: none;
   display: inline-flex; align-items: center; gap: 4px;
@@ -385,35 +366,103 @@ onMounted(() => {
 }
 .cc-btn svg { width: 13px; height: 13px; }
 
+/* 液态悬停：与全局 btn-pill 同语言 */
+.cc-btn {
+  transition:
+    border-radius .5s cubic-bezier(.22, 1, .36, 1),
+    transform .3s cubic-bezier(.22, .61, .36, 1),
+    box-shadow .35s ease;
+}
+@media (hover: hover) {
+  .cc-btn:hover {
+    animation: cc-liquid 2.6s ease-in-out infinite;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, .3);
+  }
+}
+@keyframes cc-liquid {
+  0%, 100% { border-radius: 56% 44% 52% 48% / 46% 58% 42% 54%; }
+  33% { border-radius: 44% 56% 46% 54% / 56% 44% 56% 44%; }
+  66% { border-radius: 50% 50% 44% 56% / 44% 52% 48% 56%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-btn, .cc-btn:hover { animation: none; transition: none; }
+}
+
 /* 单元列表标题 */
 .unit-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 22px 16px 10px; }
 .uh-kicker { font-size: 9px; font-weight: 800; letter-spacing: .12em; color: var(--ink-3); }
 .uh-title { margin-top: 2px; font-size: 16px; font-weight: 800; }
 .uh-tag { font-size: 10px; color: var(--ink-3); text-align: right; max-width: 55%; line-height: 1.4; }
 
-.unit-list { display: flex; flex-direction: column; gap: 10px; margin: 0 14px; }
-.unit-card {
+/* 单元叠放列表 */
+.unit-stack { display: flex; flex-direction: column; margin: 0 14px; border-top: 1px solid var(--line); }
+.unit-item { border-bottom: 1px solid var(--line); }
+.unit-toggle {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  padding: 14px 2px;
+  background: none;
   text-align: left;
-  padding: 14px 15px;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
-  transition: transform .18s ease, box-shadow .2s ease;
 }
-.unit-card:active { transform: scale(0.985); }
-@media (hover: hover) { .unit-card:hover { box-shadow: var(--shadow-pop); } }
-.uc-top { display: flex; align-items: center; gap: 10px; }
-.uc-index { font-size: 11px; font-weight: 800; color: var(--ink-3); }
-.uc-names { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
-.uc-zh { font-size: 15px; font-weight: 800; }
-.uc-ko { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.uc-pct { font-size: 12px; font-weight: 800; color: var(--accent-deep); }
-.uc-blurb { margin: 7px 0 10px; font-size: 12px; color: var(--ink-2); line-height: 1.55; }
-.uc-foot { display: flex; align-items: center; gap: 10px; }
+.ut-index { flex: none; font-size: 11px; font-weight: 800; color: var(--ink-3); }
+.ut-names { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.ut-zh { font-size: 15px; font-weight: 800; }
+.ut-ko { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ut-pct { flex: none; font-size: 12px; font-weight: 700; color: var(--ink-3); }
+.ut-pct.is-started { color: var(--accent-deep); }
+.ut-chev { width: 14px; height: 14px; flex: none; color: var(--ink-3); transition: transform .3s cubic-bezier(.22,.61,.36,1); }
+.unit-item.is-open .ut-chev { transform: rotate(180deg); }
+.unit-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .32s cubic-bezier(.22,.61,.36,1); }
+.unit-item.is-open .unit-body { grid-template-rows: 1fr; }
+.unit-inner { overflow: hidden; min-height: 0; }
+.ut-wrap { margin: 0 2px 14px; padding: 12px 13px 13px; border-radius: var(--radius-m); background: var(--surface-2); }
+.ut-blurb { margin: 0; font-size: 11px; color: var(--ink-2); line-height: 1.55; }
+.ut-bar-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 12px; }
 .bar-track { flex: 1; height: 5px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width .4s cubic-bezier(.22,.61,.36,1); }
-.uc-cap { flex: none; font-size: 10px; color: var(--ink-3); }
+.ut-cap { flex: none; font-size: 10px; color: var(--ink-3); }
+.ut-lesson { border-top: 1px solid var(--line); padding-top: 10px; }
+.ut-lesson + .ut-lesson { margin-top: 10px; }
+.utl-top { display: flex; align-items: baseline; gap: 8px; }
+.utl-title { font-size: 12px; font-weight: 700; }
+.utl-note { flex: 1; font-size: 9px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.utl-pct { font-size: 9px; color: var(--ink-3); }
+.utl-modes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.utl-mode {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  font-size: 12px;
+  transition: all .16s ease;
+}
+.utl-mode:active { transform: scale(0.96); }
+.utlm-label { font-weight: 600; }
+.utlm-score { font-size: 10px; color: var(--accent-deep); font-weight: 700; }
+.utlm-score.is-new { color: var(--ink-3); font-weight: 500; }
+.ut-foot { margin-top: 12px; text-align: center; }
+
+/* 叠放抽卡动效：行错落入场；展开时托盘如抽卡升起，课时与胶囊逐个就位 */
+.unit-item { animation: row-in .4s cubic-bezier(.22, .61, .36, 1) both; animation-delay: calc(var(--i, 0) * 55ms); }
+@keyframes row-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.unit-item:not(.is-open) .unit-body { transition-duration: .22s; }
+.unit-item.is-open .ut-wrap { animation: tray-in .42s cubic-bezier(.22, .61, .36, 1); }
+@keyframes tray-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.unit-item.is-open .ut-lesson { animation: row-in .34s ease both; }
+.unit-item.is-open .ut-lesson:nth-child(1) { animation-delay: .08s; }
+.unit-item.is-open .ut-lesson:nth-child(2) { animation-delay: .14s; }
+.unit-item.is-open .ut-lesson:nth-child(3) { animation-delay: .2s; }
+.unit-item.is-open .utl-mode { animation: pill-in .26s ease both; }
+@keyframes pill-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.unit-item.is-open .utl-mode:nth-child(1) { animation-delay: .16s; }
+.unit-item.is-open .utl-mode:nth-child(2) { animation-delay: .2s; }
+.unit-item.is-open .utl-mode:nth-child(3) { animation-delay: .24s; }
+.unit-item.is-open .utl-mode:nth-child(4) { animation-delay: .28s; }
+@media (prefers-reduced-motion: reduce) {
+  .unit-item, .unit-item.is-open .ut-wrap, .unit-item.is-open .ut-lesson, .unit-item.is-open .utl-mode { animation: none; }
+}
 
 .locked-block {
   margin: 0 14px;
@@ -442,62 +491,6 @@ onMounted(() => {
 .pe-t2 { font-size: 11px; color: var(--ink-3); }
 .pe-arrow { color: var(--ink-3); }
 
-/* 单元详情 */
-.sheet-mask {
-  position: fixed; inset: 0;
-  background: rgba(20, 21, 25, 0.44);
-  backdrop-filter: blur(2px);
-  z-index: 100;
-  display: flex; align-items: flex-end; justify-content: center;
-}
-.sheet {
-  width: 100%; max-width: 480px;
-  max-height: 82dvh;
-  overflow-y: auto;
-  background: var(--surface);
-  border-radius: 22px 22px 0 0;
-  padding: 8px 18px calc(env(safe-area-inset-bottom) + 22px);
-  animation: sheet-up .26s cubic-bezier(.22,.61,.36,1);
-}
-@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-.sheet-grab { width: 38px; height: 4px; border-radius: 999px; background: var(--line-2); margin: 4px auto 12px; }
-.sh-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.sh-kicker { font-size: 10px; letter-spacing: .06em; color: var(--ink-3); }
-.sh-title { margin-top: 2px; font-size: 20px; font-weight: 800; }
-.sh-close {
-  flex: none; width: 30px; height: 30px;
-  border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--ink-2);
-  font-size: 13px;
-}
-.sh-blurb { margin: 8px 0 12px; font-size: 12px; color: var(--ink-2); line-height: 1.6; }
-.sh-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; font-size: 11px; color: var(--ink-2); }
-.lesson-list { display: flex; flex-direction: column; gap: 14px; }
-.lesson { border-top: 1px solid var(--line); padding-top: 12px; }
-.ls-top { display: flex; align-items: baseline; gap: 8px; }
-.ls-title { font-size: 14px; font-weight: 700; }
-.ls-note { flex: 1; font-size: 10px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls-pct { font-size: 10px; color: var(--ink-3); }
-.ls-modes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.ls-mode {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 7px 11px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  font-size: 12px;
-  transition: all .16s ease;
-}
-.ls-mode:active { transform: scale(0.96); }
-.lsm-label { font-weight: 600; }
-.lsm-score { font-size: 10px; color: var(--accent-deep); font-weight: 700; }
-.lsm-score.is-new { color: var(--ink-3); font-weight: 500; }
-.sh-foot { margin-top: 18px; text-align: center; }
-
-.sheet-enter-active, .sheet-leave-active { transition: opacity .2s ease; }
-.sheet-enter-from, .sheet-leave-to { opacity: 0; }
-
 @media (min-width: 760px) {
   .page { padding: 42px 32px 120px; }
   .hero { margin: 0 0 28px; align-items: flex-end; }
@@ -508,8 +501,8 @@ onMounted(() => {
   .level-tab { min-height: 74px; padding: 13px 16px; border-radius: 0; }
   .continue-card { border-radius: 0; padding: 20px 24px; }
   .unit-head { margin-left: 0; margin-right: 0; }
-  .unit-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; gap: 12px; }
-  .unit-card { border-radius: 0; box-shadow: none; }
+  .unit-stack { margin: 0; }
+  .ut-wrap { padding: 14px 16px 16px; }
   .progress-entry { width: 100%; margin-left: 0; margin-right: 0; }
 }
 </style>
