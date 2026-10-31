@@ -136,7 +136,8 @@ function buildPass() {
     faceGeometry,
     new THREE.MeshBasicMaterial({ map: paintPass(), side: THREE.DoubleSide })
   );
-  face.position.z = 0.057;
+  // 背板前表面在 z=0.075（position -0.08 + depth 0.12 + bevel 0.035），卡面必须在其前方才能露出
+  face.position.z = 0.09;
   pass.add(face);
 
   // Embossed metallic corner studs echo the pins on the course map.
