@@ -563,8 +563,9 @@ export function levelIndexById(levelId) {
 
 export function levelProgress(progress, level) {
   if (!level.units.length) return 0;
+  // unitCompletion 返回的已是 0-100 百分比，这里取各级单元的平均值即可
   const sum = level.units.reduce((acc, u) => acc + unitCompletion(progress, u), 0);
-  return Math.round((sum / level.units.length) * 100);
+  return Math.round(sum / level.units.length);
 }
 
 export function unitCompletion(progress, unit) {
