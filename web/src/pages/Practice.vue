@@ -45,8 +45,19 @@ const s = reactive({
   fallback: false,
   evaluating: false,
   done: false,
-  summary: null
+  summary: null,
+  burst: 'idle' // 单词模式：idle 词包未拆 → bursting 爆开中 → spread 贴纸散开 → done 进入逐卡学习
 });
+
+// 贴纸散开的目标位（相对画面中心，px / 旋转 deg）
+const CHIP_SPOTS = [
+  { x: -104, y: -102, r: -7 },
+  { x: 96, y: -114, r: 5 },
+  { x: -118, y: -4, r: 6 },
+  { x: 112, y: 6, r: -6 },
+  { x: -88, y: 102, r: -5 },
+  { x: 94, y: 110, r: 7 }
+];
 
 const loading = ref(!courseState.loaded);
 let recorder = null;
@@ -61,7 +72,11 @@ const items = computed(() => {
 
 const item = computed(() => items.value[s.idx] || {});
 const total = computed(() => items.value.length || 1);
-const pct = computed(() => Math.round((s.idx / total.value) * 100));
+// 单词模式为环形学习序，进度看「已学个数」；其余模式为线性顺序
+const pct = computed(() => {
+  if (s.mode === 'vocab') return Math.round((s.ratings.length / total.value) * 100);
+  return Math.round((s.idx / total.value) * 100);
+});
 const prevState = computed(() => {
   const up = (courseState.course.progress || {})[unit ? unit.id : ''] || {};
   const lp = up[lesson ? lesson.id : ''] || {};
@@ -93,6 +108,36 @@ function resetSession(mode) {
   s.evaluating = false;
   s.done = false;
   s.summary = null;
+  s.burst = mode === 'vocab' ? 'idle' : 'done';
+}
+
+/* ---------- 单词贴纸包：拆包 → 贴纸散开 → 点选学习 ---------- */
+function burstWords() {
+  if (s.burst !== 'idle') return;
+  s.burst = 'bursting';
+  setTimeout(() => { if (s.burst === 'bursting') s.burst = 'spread'; }, 640);
+}
+
+function chipStyle(i) {
+  const spot = CHIP_SPOTS[i % CHIP_SPOTS.length];
+  return {
+    '--tx': spot.x + 'px',
+    '--ty': spot.y + 'px',
+    '--rot': spot.r + 'deg',
+    '--pi': i
+  };
+}
+
+function learnChip(i) {
+  s.idx = i;
+  s.flipped = false;
+  s.burst = 'done';
+}
+
+function skipBurst() {
+  s.idx = 0;
+  s.flipped = false;
+  s.burst = 'done';
 }
 
 function goMode(mode) {
@@ -123,16 +168,16 @@ function playDemo() {
   });
 }
 
-/* ---------- 单词：自评生疏 / 一般 / 掌握 ---------- */
+/* ---------- 单词：自评生疏 / 一般 / 掌握（环形学习序：从点选的词开始，绕回直到全部学过） ---------- */
 function rateWord(level) {
   const points = { hard: 40, good: 70, easy: 100 };
   s.ratings.push(points[level] || 60);
-  if (s.idx < total.value - 1) {
-    s.idx += 1;
-    s.flipped = false;
-  } else {
+  if (s.ratings.length >= total.value) {
     const avg = Math.round(s.ratings.reduce((a, b) => a + b, 0) / s.ratings.length);
     finish(avg);
+  } else {
+    s.idx = (s.idx + 1) % total.value;
+    s.flipped = false;
   }
 }
 
@@ -439,41 +484,71 @@ onBeforeUnmount(() => {
 
     <!-- ===== 单词闪卡 ===== -->
     <template v-else-if="s.mode === 'vocab'">
-      <div class="step-head rise rise-2">
-        <span class="kicker">WORD DECK · {{ s.idx + 1 }} / {{ total }}</span>
-        <h2 class="step-title">先猜，再翻面</h2>
+      <!-- 词包场景：拆包后单词贴纸散开，点选学习 -->
+      <div v-if="s.burst !== 'done'" class="vocab-pack" :class="'is-' + s.burst">
+        <div class="step-head rise rise-2">
+          <span class="kicker">WORD PACK · {{ total }} 장</span>
+          <h2 class="step-title">拆开这一单元的词包</h2>
+        </div>
+        <div class="pack-stage">
+          <button class="pack" :disabled="s.burst !== 'idle'" aria-label="拆开词包" @click="burstWords">
+            <span class="pack-kicker">오늘의 단어</span>
+            <strong class="pack-title">단어 팩</strong>
+            <span class="pack-sub">{{ unit.level }} · {{ total }} 张贴纸</span>
+          </button>
+          <button
+            v-for="(w, i) in unit.vocab"
+            :key="w.v"
+            class="word-chip"
+            :style="chipStyle(i)"
+            :aria-label="'学习单词 ' + w.v"
+            @click="learnChip(i)"
+          >
+            <span class="chip-word">{{ w.v }}</span>
+            <span class="chip-roman">{{ w.r }}</span>
+          </button>
+        </div>
+        <button class="pack-skip" @click="skipBurst">不拆了，直接逐张学习 →</button>
       </div>
 
-      <FlashCard3D
-        :word="item"
-        :flipped="s.flipped"
-        :tag="unit.level + ' · 단어'"
-        class="rise rise-2"
-        @toggle="onFlip"
-      />
+      <!-- 逐卡学习流 -->
+      <template v-else>
+        <div class="step-head rise rise-2">
+          <span class="kicker">WORD DECK · {{ s.ratings.length + 1 }} / {{ total }}</span>
+          <h2 class="step-title">先猜，再翻面</h2>
+        </div>
 
-      <div class="flash-actions rise rise-3">
-        <button class="btn btn-ghost btn-pill" @click="playWord">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6.5 9H3v6h3.5L11 19V5Z" /><path d="M15 9.5a4 4 0 0 1 0 5" /></svg>
-          听发音
-        </button>
-        <button class="btn btn-primary btn-pill" @click="onFlip">
-          {{ s.flipped ? '翻回正面' : '翻面看释义' }}
-        </button>
-      </div>
+        <FlashCard3D
+          :word="item"
+          :flipped="s.flipped"
+          :tag="unit.level + ' · 단어'"
+          class="rise rise-2"
+          @toggle="onFlip"
+        />
 
-      <div v-if="s.flipped" class="rate-row rise rise-3">
-        <button class="rate-btn rate-hard" @click="rateWord('hard')">
-          <strong>生疏</strong><small>很快再见</small>
-        </button>
-        <button class="rate-btn rate-good" @click="rateWord('good')">
-          <strong>一般</strong><small>明天复习</small>
-        </button>
-        <button class="rate-btn rate-easy" @click="rateWord('easy')">
-          <strong>掌握</strong><small>拉长间隔</small>
-        </button>
-      </div>
-      <div v-else class="cap center hint-soft">点击卡片或按钮翻面，再自评熟悉程度</div>
+        <div class="flash-actions rise rise-3">
+          <button class="btn btn-ghost btn-pill" @click="playWord">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6.5 9H3v6h3.5L11 19V5Z" /><path d="M15 9.5a4 4 0 0 1 0 5" /></svg>
+            听发音
+          </button>
+          <button class="btn btn-primary btn-pill" @click="onFlip">
+            {{ s.flipped ? '翻回正面' : '翻面看释义' }}
+          </button>
+        </div>
+
+        <div v-if="s.flipped" class="rate-row rise rise-3">
+          <button class="rate-btn rate-hard" @click="rateWord('hard')">
+            <strong>生疏</strong><small>很快再见</small>
+          </button>
+          <button class="rate-btn rate-good" @click="rateWord('good')">
+            <strong>一般</strong><small>明天复习</small>
+          </button>
+          <button class="rate-btn rate-easy" @click="rateWord('easy')">
+            <strong>掌握</strong><small>拉长间隔</small>
+          </button>
+        </div>
+        <div v-else class="cap center hint-soft">点击卡片或按钮翻面，再自评熟悉程度</div>
+      </template>
 
       <div class="meta-foot">
         <span>已复习 {{ s.ratings.length }} / {{ total }}</span>
@@ -692,6 +767,73 @@ onBeforeUnmount(() => {
 .rate-easy strong { color: var(--ok); }
 .hint-soft { margin: 14px 0 0; text-align: center; }
 .center { text-align: center; }
+
+/* ===== 单词贴纸包 ===== */
+.vocab-pack { display: flex; flex-direction: column; align-items: center; }
+.pack-stage { position: relative; width: 100%; height: 388px; }
+.pack {
+  position: absolute; left: 50%; top: 46%;
+  transform: translate(-50%, -50%);
+  width: 138px; height: 164px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid rgba(32, 39, 37, .22);
+  border-radius: 10px;
+  box-shadow: 0 14px 26px rgba(44, 42, 35, .16), 6px 7px 0 #d4cec1;
+  -webkit-mask: radial-gradient(26px 20px at 50% 0, transparent 25px, #000 26px);
+  mask: radial-gradient(26px 20px at 50% 0, transparent 25px, #000 26px);
+  cursor: pointer;
+  transition: transform .25s cubic-bezier(.22, .61, .36, 1), box-shadow .25s ease;
+}
+@media (hover: hover) {
+  .vocab-pack.is-idle .pack:hover { transform: translate(-50%, -54%); box-shadow: 0 20px 32px rgba(44, 42, 35, .2), 8px 9px 0 #d4cec1; }
+}
+.pack-kicker { font-size: 8px; font-weight: 700; letter-spacing: .18em; color: var(--accent-deep); }
+.pack-title { font-family: var(--font-display); font-size: 21px; font-weight: 700; color: var(--ink); }
+.pack-sub { font-size: 9px; color: var(--ink-3); }
+.vocab-pack.is-bursting .pack { animation: pack-burst .58s cubic-bezier(.36, 0, .66, -.56) both; pointer-events: none; }
+.vocab-pack.is-spread .pack { opacity: 0; transform: translate(-50%, -30%) scale(.88) rotate(-6deg); transition: opacity .3s ease, transform .4s ease; pointer-events: none; }
+@keyframes pack-burst {
+  0% { transform: translate(-50%, -50%) scale(1) rotate(0); }
+  30% { transform: translate(-50%, -50%) scale(1.09) rotate(-4deg); }
+  60% { transform: translate(-50%, -42%) scale(1.05) rotate(3deg); opacity: 1; }
+  100% { transform: translate(-50%, -20%) scale(.86) rotate(-8deg); opacity: 0; }
+}
+.word-chip {
+  position: absolute; left: 50%; top: 47%;
+  width: 122px;
+  padding: 11px 12px 10px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--surface);
+  border: 1px solid rgba(32, 39, 37, .24);
+  border-radius: 9px;
+  box-shadow: 0 8px 16px rgba(44, 42, 35, .13);
+  text-align: left;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(.35) rotate(0deg);
+  pointer-events: none;
+}
+.vocab-pack.is-spread .word-chip {
+  opacity: 1;
+  transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--rot)) scale(1);
+  transition:
+    transform .58s cubic-bezier(.16, 1, .3, 1) calc(var(--pi) * 62ms),
+    opacity .38s ease calc(var(--pi) * 62ms + .08s);
+  pointer-events: auto;
+}
+.word-chip:active { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) rotate(var(--rot)) scale(.94); }
+.chip-word { font-size: 15px; font-weight: 800; color: var(--ink); letter-spacing: -.01em; }
+.chip-roman { font-size: 10px; color: var(--ink-3); }
+.pack-skip {
+  margin-top: 2px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pack, .word-chip { transition: none; animation: none; }
+  .vocab-pack.is-spread .word-chip { opacity: 1; }
+}
 .meta-foot {
   display: flex; justify-content: space-between;
   margin: 16px 6px 0;
@@ -704,7 +846,7 @@ onBeforeUnmount(() => {
   margin: 4px 4px 12px;
   padding: 14px 16px;
   border-radius: var(--radius-l);
-  background: linear-gradient(135deg, var(--ink) 0%, #23262F 100%);
+  background: var(--ink);
   color: #fff;
 }
 .play-big {
