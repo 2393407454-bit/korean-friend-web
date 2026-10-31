@@ -185,6 +185,29 @@ a { color: inherit; text-decoration: none; }
 
 .btn-pill { border-radius: var(--radius-pill); }
 
+/* 液态悬停：胶囊 CTA 悬停时液化成有机形态并轻微上浮（借鉴 liquid button） */
+.btn-pill {
+  transition:
+    border-radius .5s cubic-bezier(.22, 1, .36, 1),
+    transform .3s cubic-bezier(.22, .61, .36, 1),
+    box-shadow .35s ease,
+    background .18s ease,
+    color .18s ease,
+    opacity .18s ease;
+}
+@media (hover: hover) {
+  .btn-pill:hover {
+    animation: btn-liquid 2.6s ease-in-out infinite;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(132, 92, 43, .26), 0 3px 8px rgba(32, 39, 37, .12);
+  }
+}
+@keyframes btn-liquid {
+  0%, 100% { border-radius: 56% 44% 52% 48% / 46% 58% 42% 54%; }
+  33% { border-radius: 44% 56% 46% 54% / 56% 44% 56% 44%; }
+  66% { border-radius: 50% 50% 44% 56% / 44% 52% 48% 56%; }
+}
+
 /* ===== 药丸标签 ===== */
 .tag {
   display: inline-flex;
@@ -398,4 +421,5 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .rise, .sk-line, .wavebars .bar { animation: none; }
   .card, .btn, .btn-primary::after { transition: none; }
+  .btn-pill, .btn-pill:hover { animation: none; }
 }
