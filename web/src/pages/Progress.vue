@@ -1,6 +1,6 @@
 <script setup>
 // 学习进度：3D 等级奖章 + 四能力平均分雷达 + 12 周热力图 + 连续天数 / XP / 单元完成度
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import ProgressOrb3D from '../components/ProgressOrb3D.vue';
 import { loadCourse, courseState } from '../api/course';
@@ -16,7 +16,7 @@ import {
 const router = useRouter();
 
 const course = computed(() => courseState.course);
-const progress = computed(() => course.progress || {});
+const progress = computed(() => course.value.progress || {});
 const activity = computed(() => course.value.activity || {});
 const xpInfo = computed(() => levelInfo(course.value.xp));
 
@@ -114,6 +114,17 @@ function unitRows(level) {
     pct: unitCompletion(progress.value, unit)
   }));
 }
+
+// 单元完成度叠放层：默认展开有进度的一级（无进度则保持 A1）
+const openLevel = ref('A1');
+function toggleLevel(id) {
+  openLevel.value = openLevel.value === id ? '' : id;
+}
+watch(() => courseState.loaded, (loaded) => {
+  if (!loaded) return;
+  const started = LEVELS.find((l) => levelProgress(progress.value, l) > 0);
+  if (started) openLevel.value = started.id;
+}, { once: true });
 
 function goCourse() {
   router.push('/course');
@@ -238,17 +249,32 @@ onMounted(() => {
         <span class="h-sec">单元完成度</span>
         <span class="tag">18 单元 · 54 课</span>
       </div>
-      <div v-for="level in LEVELS" :key="level.id" class="level-block">
-        <div class="lb-head">
-          <span class="lb-id">{{ level.id }}</span>
-          <span class="lb-title">{{ level.title }}</span>
-          <span class="lb-pct num">{{ levelProgress(progress, level) }}%</span>
-        </div>
-        <div class="lb-list">
-          <div v-for="u in unitRows(level)" :key="u.id" class="lb-row">
-            <span class="lb-name">{{ u.zh }}<span class="lb-ko">{{ u.ko }}</span></span>
-            <div class="bar-track lb-bar"><div class="bar-fill" :style="{ width: u.pct + '%' }"></div></div>
-            <span class="lb-num num">{{ u.pct }}%</span>
+      <div class="level-stack">
+        <div v-for="(level, i) in LEVELS" :key="level.id" class="level-block" :style="{ '--i': i }" :class="{ 'is-open': openLevel === level.id }">
+          <button
+            class="lb-toggle"
+            type="button"
+            :aria-expanded="openLevel === level.id"
+            @click="toggleLevel(level.id)"
+          >
+            <span class="lb-id">{{ level.id }}</span>
+            <span class="lb-names">
+              <span class="lb-title">{{ level.title }}</span>
+              <span class="lb-sub">{{ level.desc }}</span>
+            </span>
+            <span class="lb-pct num" :class="{ 'is-started': levelProgress(progress, level) > 0 }">{{ levelProgress(progress, level) }}%</span>
+            <svg class="lb-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          <div class="lb-body" :aria-hidden="openLevel !== level.id">
+            <div class="lb-inner">
+              <div class="lb-list">
+                <div v-for="u in unitRows(level)" :key="u.id" class="lb-row">
+                  <span class="lb-name">{{ u.zh }}<span class="lb-ko">{{ u.ko }}</span></span>
+                  <div class="bar-track lb-bar"><div class="bar-fill" :style="{ width: u.pct + '%' }"></div></div>
+                  <span class="lb-num num" :class="{ 'is-started': u.pct > 0 }">{{ u.pct }}%</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -315,16 +341,14 @@ onMounted(() => {
 .rl-v { font-weight: 800; font-size: 13px; }
 .rl-n { font-size: 9px; color: var(--ink-3); width: 28px; text-align: right; }
 .insight-line {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-left: 3px solid var(--accent);
-  background: var(--accent-soft);
-  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  margin-top: 14px;
+  padding: 10px 2px 0;
+  border-top: 1px solid var(--ink);
   font-size: 11px;
   color: var(--ink-2);
   line-height: 1.6;
 }
-.insight-line.is-empty { border-left-color: var(--line-2); background: var(--surface-2); color: var(--ink-3); }
+.insight-line.is-empty { border-top-color: var(--line-2); color: var(--ink-3); }
 
 .heat-grid { display: flex; gap: 4px; margin-top: 8px; overflow-x: auto; padding-bottom: 2px; }
 .heat-week { display: flex; flex-direction: column; gap: 4px; flex: none; }
@@ -338,18 +362,64 @@ onMounted(() => {
 .hl-l { margin: 0 2px; }
 .hl-r { margin-left: auto; }
 
-.level-block { margin-top: 14px; }
-.level-block + .level-block { border-top: 1px solid var(--line); padding-top: 14px; }
-.lb-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 8px; }
-.lb-id { font-size: 12px; font-weight: 800; color: var(--accent-deep); }
-.lb-title { font-size: 12px; font-weight: 700; }
-.lb-pct { margin-left: auto; font-size: 11px; color: var(--ink-3); }
-.lb-list { display: flex; flex-direction: column; gap: 7px; }
+/* 单元完成度：三级叠放手风琴 */
+.level-stack { display: flex; flex-direction: column; }
+.level-block { border-top: 1px solid var(--line); }
+.level-block:first-child { border-top: 0; }
+.lb-toggle {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 13px 2px;
+  background: none;
+  text-align: left;
+}
+.lb-id { width: 24px; flex: none; font-size: 13px; font-weight: 800; color: var(--accent-deep); }
+.lb-names { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.lb-title { font-size: 13px; font-weight: 700; }
+.lb-sub { font-size: 9px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-pct { flex: none; font-size: 12px; font-weight: 700; color: var(--ink-3); }
+.lb-pct.is-started { color: var(--accent-deep); }
+.lb-chev { width: 14px; height: 14px; flex: none; color: var(--ink-3); transition: transform .3s cubic-bezier(.22,.61,.36,1); }
+.level-block.is-open .lb-chev { transform: rotate(180deg); }
+.lb-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows .32s cubic-bezier(.22,.61,.36,1);
+}
+.level-block.is-open .lb-body { grid-template-rows: 1fr; }
+.lb-inner { overflow: hidden; min-height: 0; }
+.lb-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin: 0 2px 14px;
+  padding: 11px 12px 13px;
+  border-radius: var(--radius-m);
+  background: var(--surface-2);
+}
 .lb-row { display: flex; align-items: center; gap: 8px; }
 .lb-name { width: 46%; font-size: 11px; color: var(--ink-2); display: flex; gap: 5px; min-width: 0; }
 .lb-ko { color: var(--ink-3); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lb-bar { flex: 1; height: 4px; }
+.lb-bar .bar-fill { background: var(--accent); }
 .lb-num { width: 30px; text-align: right; font-size: 10px; color: var(--ink-3); }
+.lb-num.is-started { color: var(--accent-deep); font-weight: 700; }
+
+/* 叠放抽卡动效：级别行错落入场；展开时托盘如抽卡升起，单元行逐个就位 */
+.level-block { animation: level-row-in .38s cubic-bezier(.22, .61, .36, 1) both; animation-delay: calc(var(--i, 0) * 70ms); }
+@keyframes level-row-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.level-block:not(.is-open) .lb-body { transition-duration: .22s; }
+.level-block.is-open .lb-list { animation: level-tray-in .42s cubic-bezier(.22, .61, .36, 1); }
+@keyframes level-tray-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.level-block.is-open .lb-row { animation: level-pill-in .26s ease both; }
+@keyframes level-pill-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.level-block.is-open .lb-row:nth-child(1) { animation-delay: .12s; }
+.level-block.is-open .lb-row:nth-child(2) { animation-delay: .16s; }
+.level-block.is-open .lb-row:nth-child(3) { animation-delay: .2s; }
+.level-block.is-open .lb-row:nth-child(4) { animation-delay: .24s; }
+.level-block.is-open .lb-row:nth-child(5) { animation-delay: .28s; }
+.level-block.is-open .lb-row:nth-child(6) { animation-delay: .32s; }
+@media (prefers-reduced-motion: reduce) {
+  .level-block, .level-block.is-open .lb-list, .level-block.is-open .lb-row { animation: none; }
+}
 
 .back-course {
   display: block;
